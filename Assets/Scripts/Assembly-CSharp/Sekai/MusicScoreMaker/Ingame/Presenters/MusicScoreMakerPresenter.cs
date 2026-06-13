@@ -7773,7 +7773,30 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void CallTutorial(CallTutorialEvent e)
 		{
-			MusicScoreMakerRuleSlideTutorialUtility.TryShowTutorialSlideIfFirstTime("enter");
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => ShowTutorialTypeSelectionDialog(),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("是否确认查看说明？");
+		}
+
+		private void ShowTutorialTypeSelectionDialog()
+		{
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_TUTORIAL_TEXT_GUIDE",
+				"WORD_TUTORIAL_VIDEO_GUIDE",
+				() => Application.OpenURL("https://blog.jsoftstudio.top/read/%E6%96%87%E6%A1%A3/64bb276f-18a5-4eb5-b29e-6bca741db5c6"),
+				() => Application.OpenURL("https://www.bilibili.com/video/BV1f6Vh6pECA"),
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("请选择要查看的说明");
 		}
 
 		private void ShowNoteAndComboCountDialog(ShowNoteAndComboCountDialogEvent e)
