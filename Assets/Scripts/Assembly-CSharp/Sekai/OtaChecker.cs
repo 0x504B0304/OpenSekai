@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using CP;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -9,7 +8,6 @@ namespace Sekai
 {
     public class OtaChecker : SingletonMonoBehaviour<OtaChecker>
     {
-        private const string ConfigFileName = "jsofttool.prop";
         private const string OtaUrl = "https://ota.jsoftstudio.top/appver?appid=oj03";
 
         private int localVersionNumber = 45;
@@ -27,39 +25,21 @@ namespace Sekai
         {
             try
             {
-                string filePath = Path.Combine(Application.dataPath, "Scripts", ConfigFileName);
-                if (File.Exists(filePath))
+                TextAsset jsonAsset = Resources.Load<TextAsset>("jsofttool");
+                if (jsonAsset != null)
                 {
-                    string[] lines = File.ReadAllLines(filePath);
-                    foreach (string line in lines)
+                    var versionData = JsonUtility.FromJson<VersionData>(jsonAsset.text);
+                    if (versionData != null)
                     {
-                        if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#"))
-                            continue;
-
-                        string[] parts = line.Split('=');
-                        if (parts.Length == 2)
-                        {
-                            string key = parts[0].Trim();
-                            string value = parts[1].Trim();
-                            if (key.Equals("vernumber", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (int.TryParse(value, out int version))
-                                {
-                                    localVersionNumber = version;
-                                    Debug.Log($"[OtaChecker] Local version number: {localVersionNumber}");
-                                }
-                            }
-                            else if (key.Equals("version", StringComparison.OrdinalIgnoreCase))
-                            {
-                                localVersionString = value;
-                                Debug.Log($"[OtaChecker] Local version string: {localVersionString}");
-                            }
-                        }
+                        localVersionNumber = versionData.vernumber;
+                        localVersionString = versionData.version;
+                        Debug.Log($"[OtaChecker] Local version number: {localVersionNumber}");
+                        Debug.Log($"[OtaChecker] Local version string: {localVersionString}");
                     }
                 }
                 else
                 {
-                    Debug.LogWarning($"[OtaChecker] Config file not found: {filePath}");
+                    Debug.LogWarning($"[OtaChecker] Config file not found in Resources: jsofttool");
                 }
             }
             catch (Exception ex)
@@ -232,6 +212,13 @@ namespace Sekai
                 i++;
             }
             return sb.ToString();
+        }
+
+        [Serializable]
+        private class VersionData
+        {
+            public int vernumber;
+            public string version;
         }
 
         [Serializable]
