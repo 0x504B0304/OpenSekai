@@ -1,4 +1,5 @@
 using UnityEngine;
+using Sekai.Live;
 
 namespace Sekai
 {
@@ -19,19 +20,22 @@ namespace Sekai
 			{
 				return;
 			}
-			float alpha = liveSetting.LaneTransparent;
+			float laneAlpha = liveSetting.LaneTransparent;
+			float judgeLineAlpha = LiveConfig.JudgeLineAlpha;
 			if (defaultLaneBase != null)
 			{
-				defaultLaneBase.color = new Color(1f, 1f, 1f, alpha);
-				defaultLaneBase.enabled = alpha > 0f;
+				defaultLaneBase.color = new Color(1f, 1f, 1f, laneAlpha);
+				defaultLaneBase.enabled = laneAlpha > 0f;
 			}
 			if (defaultLaneLine != null)
 			{
-				defaultLaneLine.enabled = true;
+				defaultLaneLine.color = new Color(1f, 1f, 1f, judgeLineAlpha);
+				defaultLaneLine.enabled = judgeLineAlpha > 0f;
 			}
 			if (defaultJudgeLine != null)
 			{
-				defaultJudgeLine.enabled = true;
+				defaultJudgeLine.color = new Color(1f, 1f, 1f, judgeLineAlpha);
+				defaultJudgeLine.enabled = judgeLineAlpha > 0f;
 			}
 		}
 

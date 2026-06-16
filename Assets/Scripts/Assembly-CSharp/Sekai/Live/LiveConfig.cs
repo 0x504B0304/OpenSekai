@@ -97,6 +97,8 @@ namespace Sekai.Live
 
 		public static float GuideAlpha;
 
+		public static float JudgeLineAlpha;
+
 		public const int ScoreMakerPreviewModeThumbnail = 0;
 
 		public const int ScoreMakerPreviewModeWaveform = 1;
@@ -257,6 +259,7 @@ namespace Sekai.Live
 			LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
 			LongNoteAlpha = liveSettingData.GetNoteAlpha();
 			GuideAlpha = liveSettingData.GetGuideAlpha();
+			JudgeLineAlpha = liveSettingData.GetJudgeLineAlpha();
 			SetNoteSkinAssetBundleName(Mathf.Clamp(liveSettingData.NoteSkinIndex, 0, 1));
 			SetNoteSeName(liveSettingData.NoteSeIndex);
 			SetNoteEffectName(liveSettingData.NoteEffect);
@@ -462,6 +465,7 @@ namespace Sekai.Live
 			SkillBundleName = "effect_asset/live/skill/default";
 			LongNoteAlpha = 1f;
 			GuideAlpha = 0.6f;
+			JudgeLineAlpha = 1f;
 			TimelineBundleNames = new[] { "camera", "character", "effect", "light", "stage", "penlight" };
 			SpawnPosition = new Vector2(0f, 5.46f);
 			JudgmentPositions = new[]

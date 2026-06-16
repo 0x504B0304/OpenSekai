@@ -84,6 +84,9 @@ namespace Sekai
 		[Key("GuideAlpha")]
 		public float GuideAlpha { get; set; }
 
+		[Key("JudgeLineAlpha")]
+		public float JudgeLineAlpha { get; set; }
+
 		[Key("NoteSkinIndex")]
 		public int NoteSkinIndex { get; set; }
 
@@ -231,6 +234,7 @@ namespace Sekai
 			ShowsRoomId = true;
 			NoteAlpha = 1f;
 			GuideAlpha = 0.6f;
+			JudgeLineAlpha = 1f;
 			AutoSaveIntervalIndex = 0;
 			ScoreMakerPreviewModeIndex = 0;
 			CustomRoomIsDisplayPlayerInfo = true;
@@ -322,6 +326,11 @@ namespace Sekai
 		public float GetGuideAlpha()
 		{
 			return GuideAlpha == 0f ? 0.6f : GuideAlpha;
+		}
+
+		public float GetJudgeLineAlpha()
+		{
+			return JudgeLineAlpha == 0f ? 1f : JudgeLineAlpha;
 		}
 
 		public void SetNoteShowRate(float optionValue)

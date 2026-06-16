@@ -142,6 +142,7 @@ namespace Sekai.CustomMusicScoreManager
 		private Button _deleteButton;
 		private Button _exportButton;
 		private Button _saveManifestButton;
+		private Button _calculateDurationButton;
 		private Button _audioSelectButton;
 		private Button _jacketSelectButton;
 		private Button _scoreSelectButton;
@@ -155,6 +156,7 @@ namespace Sekai.CustomMusicScoreManager
 		private TMP_InputField _settingBackgroundBrightnessInput;
 		private TMP_InputField _settingNoteLineAlphaInput;
 		private TMP_InputField _settingGuideLineAlphaInput;
+		private TMP_InputField _settingJudgeLineAlphaInput;
 		private TextMeshProUGUI _settingAutoSaveIntervalLabel;
 		private int _settingAutoSaveIntervalIndex;
 		private TextMeshProUGUI _settingScoreMakerPreviewModeLabel;
@@ -391,6 +393,7 @@ namespace Sekai.CustomMusicScoreManager
 			saveRowGroup.childForceExpandHeight = false;
 			saveRowGroup.childAlignment = TextAnchor.MiddleLeft;
 			_saveManifestButton = CreateButton("SaveManifestButton", saveRow, "保存配置", SaveSelectedManifest, 230f, 58f);
+			_calculateDurationButton = CreateButton("CalculateDurationButton", saveRow, "计算时长", OnCalculateDurationClicked, 160f, 58f);
 			_statusText = CreateText("StatusText", saveRow, string.Empty, 21, FontStyles.Normal, TextAlignmentOptions.Right);
 			_statusText.raycastTarget = false;
 			LayoutElement statusLayout = _statusText.gameObject.AddComponent<LayoutElement>();
@@ -448,6 +451,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingBackgroundBrightnessInput = CreateInputField(settingsContent, "背景亮度", "0 - 100");
 			_settingNoteLineAlphaInput = CreateInputField(settingsContent, "长条线不透明度", "10 - 100");
 			_settingGuideLineAlphaInput = CreateInputField(settingsContent, "Guide线不透明度", "10 - 100");
+			_settingJudgeLineAlphaInput = CreateInputField(settingsContent, "判定线不透明度", "0 - 100");
 			CreateSettingAutoSaveIntervalSelector(settingsContent);
 			CreateSettingNoteSkinSelector(settingsContent);
 			CreateSettingNoteSeSelector(settingsContent);
@@ -493,6 +497,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingBackgroundBrightnessInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.Brightness * 100f));
 			_settingNoteLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetNoteAlpha() * 100f));
 			_settingGuideLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetGuideAlpha() * 100f));
+			_settingJudgeLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetJudgeLineAlpha() * 100f));
 			SetAutoSaveInterval(liveSettingData.AutoSaveIntervalIndex);
 			SetScoreMakerPreviewMode(liveSettingData.ScoreMakerPreviewModeIndex);
 			SetSettingNoteSkinIndex(liveSettingData.NoteSkinIndex);
@@ -651,6 +656,11 @@ namespace Sekai.CustomMusicScoreManager
 				MinVisualAlphaPercent,
 				MaxVisualAlphaPercent,
 				liveSettingData.GetGuideAlpha() * 100f) / 100f;
+			liveSettingData.JudgeLineAlpha = ParseClampedSetting(
+				_settingJudgeLineAlphaInput.text,
+				0f,
+				MaxVisualAlphaPercent,
+				liveSettingData.GetJudgeLineAlpha() * 100f) / 100f;
 			liveSettingData.NoteSkinIndex = _settingNoteSkinIndex;
 			liveSettingData.AutoSaveIntervalIndex = _settingAutoSaveIntervalIndex;
 			liveSettingData.ScoreMakerPreviewModeIndex = _settingScoreMakerPreviewModeIndex;
@@ -676,6 +686,7 @@ namespace Sekai.CustomMusicScoreManager
 			SoundManager.Instance.SetupVolume(1f, liveVolume.Bgm, liveVolume.Se, liveVolume.Voice);
 			LiveConfig.LongNoteAlpha = liveSettingData.GetNoteAlpha();
 			LiveConfig.GuideAlpha = liveSettingData.GetGuideAlpha();
+			LiveConfig.JudgeLineAlpha = liveSettingData.GetJudgeLineAlpha();
 			LiveConfig.SetNoteSkinAssetBundleName(liveSettingData.NoteSkinIndex);
 			LiveConfig.SetNoteSeName(liveSettingData.NoteSeIndex);
 			LiveConfig.SetNoteEffectName(liveSettingData.NoteEffect);
@@ -689,6 +700,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingBackgroundBrightnessInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.Brightness * 100f));
 			_settingNoteLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetNoteAlpha() * 100f));
 			_settingGuideLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetGuideAlpha() * 100f));
+			_settingJudgeLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetJudgeLineAlpha() * 100f));
 			SetAutoSaveInterval(liveSettingData.AutoSaveIntervalIndex);
 			SetScoreMakerPreviewMode(liveSettingData.ScoreMakerPreviewModeIndex);
 			SetSettingNoteSkinIndex(liveSettingData.NoteSkinIndex);
@@ -1850,6 +1862,7 @@ namespace Sekai.CustomMusicScoreManager
 			_deleteButton.interactable = hasSelection;
 			_exportButton.interactable = hasSelection;
 			_saveManifestButton.interactable = hasSelection;
+			_calculateDurationButton.interactable = hasSelection && item.HasAudio;
 			_audioSelectButton.interactable = hasSelection;
 			_jacketSelectButton.interactable = hasSelection;
 			_scoreSelectButton.interactable = hasSelection;
@@ -2796,6 +2809,70 @@ namespace Sekai.CustomMusicScoreManager
 			if (savedEntry != null)
 			{
 				ShowSuccessDialog("配置已保存。");
+			}
+		}
+
+		private void OnCalculateDurationClicked()
+		{
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => CalculateDurationAsync().Forget(),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("是否一键设置谱面时长秒？");
+		}
+
+		private async UniTaskVoid CalculateDurationAsync()
+		{
+			if (_selected?.Entry == null)
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			CustomMusicScoreEntry entry = _selected.Entry;
+			if (!File.Exists(entry.AudioPath))
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			SetStatus("正在加载音频...");
+			bool audioReady = await entry.RegisterAudioAsync(this.GetCancellationTokenOnDestroy());
+			if (!audioReady || entry.AudioLengthMs <= 0)
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			float audioSeconds = entry.AudioLengthMs / 1000f;
+			float fillerSec = entry.Manifest.fillerSec;
+			int calculatedDuration = Mathf.CeilToInt(audioSeconds - fillerSec + 2f);
+			calculatedDuration = Mathf.Max(1, calculatedDuration);
+
+			entry.Manifest.secForMusicScoreMaker = calculatedDuration;
+			CustomMusicScoreEntry savedEntry = CustomMusicScoreManagerService.SaveManifest(entry, entry.Manifest);
+			if (savedEntry != null)
+			{
+				_selected = new CustomMusicScoreManagerItem(
+					savedEntry,
+					DateTime.Now,
+					File.Exists(savedEntry.ManifestPath),
+					File.Exists(savedEntry.ScorePath),
+					File.Exists(savedEntry.AudioPath),
+					File.Exists(savedEntry.JacketPath));
+				LoadForm(savedEntry.Manifest);
+				RefreshList();
+				SetStatus("时长已自动计算。");
+				ShowSuccessDialog($"已自动计算，时长为：{calculatedDuration}秒");
+			}
+			else
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
 			}
 		}
 
