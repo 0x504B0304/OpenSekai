@@ -1157,7 +1157,14 @@ namespace Sekai.Core.Live
 				return 0f;
 			}
 
-			return noteDisplayTimeOffset / speedRatio / note.speedRatio;
+			// Use absolute value to handle negative speed ratios which cause rendering issues
+			float effectiveSpeedRatio = Mathf.Abs(speedRatio * note.speedRatio);
+			if (Mathf.Approximately(effectiveSpeedRatio, 0f))
+			{
+				return 0f;
+			}
+
+			return noteDisplayTimeOffset / effectiveSpeedRatio;
 		}
 
 		private float CalcNoteSpeedRatio(float currentProgress, float noteProgress)

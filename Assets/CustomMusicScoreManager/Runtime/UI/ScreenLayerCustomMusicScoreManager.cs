@@ -489,7 +489,11 @@ namespace Sekai.CustomMusicScoreManager
 		private void OpenSettings()
 		{
 			ApplicationLocalSettings localSettings = ApplicationLocalSettings.LoadFromStorage();
-			ApplicationLocalSettings.VolumeSettings liveVolume = localSettings.LiveVolume ?? localSettings.SetupLiveVolume();
+			if (localSettings.LiveVolume == null)
+			{
+				localSettings.SetupLiveVolume();
+			}
+			ApplicationLocalSettings.VolumeSettings liveVolume = localSettings.LiveVolume;
 			LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
 
 			_settingLiveBgmInput.SetTextWithoutNotify(FormatSettingValue(liveVolume.Bgm));
