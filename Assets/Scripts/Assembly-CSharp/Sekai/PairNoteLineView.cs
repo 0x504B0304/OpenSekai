@@ -133,8 +133,11 @@ namespace Sekai
 						progress = 1f;
 					}
 
-					Vector2 start = LiveUtility.EarlyVec2Lerp(LiveConfig.SpawnPosition, LaneCenter(note), progress);
-					Vector2 end = LiveUtility.EarlyVec2Lerp(LiveConfig.SpawnPosition, LaneCenter(note.PairNote), progress);
+					// 根据流速正负选择不同的 spawnPosition
+				bool isNegativeSpeed = note is NoteBase noteBase && noteBase.IsNegativeSpeed;
+				Vector2 effectiveSpawnPos = isNegativeSpeed ? LiveConfig.SpawnPositionNegative : LiveConfig.SpawnPosition;
+					Vector2 start = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, LaneCenter(note), progress);
+					Vector2 end = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, LaneCenter(note.PairNote), progress);
 					float halfHeight = progress * 0.2f;
 					vertices[vertexIndex] = new Vector3(start.x, start.y + halfHeight, 0f);
 					vertices[vertexIndex + 1] = new Vector3(end.x, end.y + halfHeight, 0f);

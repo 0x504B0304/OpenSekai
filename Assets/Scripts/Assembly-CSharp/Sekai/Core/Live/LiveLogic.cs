@@ -1157,8 +1157,12 @@ namespace Sekai.Core.Live
 				return 0f;
 			}
 
+			// 检测负流速：当 speedRatio * note.speedRatio < 0 时标记为负流速
+			float rawEffectiveSpeedRatio = speedRatio * note.speedRatio;
+			note.IsNegativeSpeed = rawEffectiveSpeedRatio < 0f;
+
 			// Use absolute value to handle negative speed ratios which cause rendering issues
-			float effectiveSpeedRatio = Mathf.Abs(speedRatio * note.speedRatio);
+			float effectiveSpeedRatio = Mathf.Abs(rawEffectiveSpeedRatio);
 			if (Mathf.Approximately(effectiveSpeedRatio, 0f))
 			{
 				return 0f;

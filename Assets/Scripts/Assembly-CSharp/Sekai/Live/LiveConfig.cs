@@ -111,6 +111,8 @@ namespace Sekai.Live
 
 		public static readonly Vector2 SpawnPosition;
 
+		public static readonly Vector2 SpawnPositionNegative;
+
 		public static readonly Vector2[] JudgmentPositions;
 
 		public static readonly float widthX;
@@ -468,6 +470,7 @@ namespace Sekai.Live
 			JudgeLineAlpha = 1f;
 			TimelineBundleNames = new[] { "camera", "character", "effect", "light", "stage", "penlight" };
 			SpawnPosition = new Vector2(0f, 5.46f);
+			SpawnPositionNegative = new Vector2(0f, -10f); // 屏幕下方外侧，用于负流速音符
 			JudgmentPositions = new[]
 			{
 				new Vector2(-6.544999f, -2.96f),

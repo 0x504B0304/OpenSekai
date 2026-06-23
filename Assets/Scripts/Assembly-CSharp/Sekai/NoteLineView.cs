@@ -403,7 +403,11 @@ namespace Sekai
 				float centerLane = Mathf.Lerp(startCenterLane, endCenterLane, centerProgress);
 				float width = Mathf.Lerp(startWidth, endWidth, centerProgress);
 				Vector2 lanePosition = GetLanePosition(centerLane);
-				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(LiveConfig.SpawnPosition, lanePosition, viewProgress);
+				// 根据流速正负选择不同的 spawnPosition（startNote 可能是 LongNote 本身，也可能是子音符）
+				bool isNegativeSpeed = startNoteBase.IsNegativeSpeed
+					|| (startNote.ParentNote is NoteBase parentNote && parentNote.IsNegativeSpeed);
+				Vector2 effectiveSpawnPos = isNegativeSpeed ? LiveConfig.SpawnPositionNegative : LiveConfig.SpawnPosition;
+				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, lanePosition, viewProgress);
 				float halfWidth = viewProgress * (((width + 1f) * LiveConfig.widthX) - 0.1f) * 0.5f;
 
 				meshSettingBuffer[i] = new Setting

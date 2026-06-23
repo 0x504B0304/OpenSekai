@@ -341,6 +341,12 @@ namespace Sekai.Live
 			set;
 		}
 
+		/// <summary>
+		/// 标记音符是否使用负流速渲染（从屏幕下方飞入）
+		/// </summary>
+		[JsonIgnore]
+		public bool IsNegativeSpeed { get; set; }
+
 		public float offsetTime
 		{
 			[CompilerGenerated]
