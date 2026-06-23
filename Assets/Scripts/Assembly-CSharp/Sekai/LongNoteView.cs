@@ -52,11 +52,12 @@ namespace Sekai
 			}
 
 			Vector2 center = GetLaneCenter(note.LaneStartF, note.LaneEndF);
-			// 根据流速正负选择不同的 spawnPosition
 			Vector2 effectiveSpawnPos = spawnPosition;
 			if (note is NoteBase noteBase && noteBase.IsNegativeSpeed)
 			{
-				effectiveSpawnPos = LiveConfig.SpawnPositionNegative; // 使用下方 spawn 位置
+				// 使用 spawnPosition 关于判定线的对称点作为负流速起点
+				effectiveSpawnPos = 2f * center - spawnPosition;
+				progress = Mathf.Min(progress, 1f);
 			}
 			Vector2 position = Vector2.LerpUnclamped(effectiveSpawnPos, center, progress);
 			float z = note.State >= NoteState.InputBegan ? 3f - posZ : posZ;

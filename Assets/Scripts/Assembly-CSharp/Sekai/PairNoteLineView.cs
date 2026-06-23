@@ -135,9 +135,14 @@ namespace Sekai
 
 					// 根据流速正负选择不同的 spawnPosition
 				bool isNegativeSpeed = note is NoteBase noteBase && noteBase.IsNegativeSpeed;
-				Vector2 effectiveSpawnPos = isNegativeSpeed ? LiveConfig.SpawnPositionNegative : LiveConfig.SpawnPosition;
-					Vector2 start = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, LaneCenter(note), progress);
-					Vector2 end = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, LaneCenter(note.PairNote), progress);
+				Vector2 noteLaneCenter = LaneCenter(note);
+				Vector2 pairLaneCenter = LaneCenter(note.PairNote);
+				Vector2 effectiveSpawnPos = isNegativeSpeed
+					? 2f * noteLaneCenter - LiveConfig.SpawnPosition // 关于判定线对称的下方起点
+					: LiveConfig.SpawnPosition;
+				float clampedProgress = isNegativeSpeed ? Mathf.Min(progress, 1f) : progress;
+					Vector2 start = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, noteLaneCenter, clampedProgress);
+					Vector2 end = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, pairLaneCenter, clampedProgress);
 					float halfHeight = progress * 0.2f;
 					vertices[vertexIndex] = new Vector3(start.x, start.y + halfHeight, 0f);
 					vertices[vertexIndex + 1] = new Vector3(end.x, end.y + halfHeight, 0f);

@@ -406,8 +406,11 @@ namespace Sekai
 				// 根据流速正负选择不同的 spawnPosition（startNote 可能是 LongNote 本身，也可能是子音符）
 				bool isNegativeSpeed = startNoteBase.IsNegativeSpeed
 					|| (startNote.ParentNote is NoteBase parentNote && parentNote.IsNegativeSpeed);
-				Vector2 effectiveSpawnPos = isNegativeSpeed ? LiveConfig.SpawnPositionNegative : LiveConfig.SpawnPosition;
-				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, lanePosition, viewProgress);
+				Vector2 effectiveSpawnPos = isNegativeSpeed
+					? 2f * lanePosition - LiveConfig.SpawnPosition // 关于判定线对称的下方起点
+					: LiveConfig.SpawnPosition;
+				float clampedViewProgress = isNegativeSpeed ? Mathf.Min(viewProgress, 1f) : viewProgress;
+				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, lanePosition, clampedViewProgress);
 				float halfWidth = viewProgress * (((width + 1f) * LiveConfig.widthX) - 0.1f) * 0.5f;
 
 				meshSettingBuffer[i] = new Setting
