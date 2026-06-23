@@ -171,6 +171,8 @@ namespace Sekai.CustomMusicScoreManager
 		private bool _settingSimultaneousLineEnabled;
 		private TextMeshProUGUI _settingMusicInfoDisplayModeLabel;
 		private int _settingMusicInfoDisplayMode;
+		private TextMeshProUGUI _settingUseMaimaiMusicInfoSeLabel;
+		private bool _settingUseMaimaiMusicInfoSeEnabled;
 		private TextMeshProUGUI _settingAutoFakePerfectModeLabel;
 		private int _settingAutoFakePerfectMode;
 		private TextMeshProUGUI _settingAutoResultAnimationLabel;
@@ -458,6 +460,7 @@ namespace Sekai.CustomMusicScoreManager
 			CreateSettingNoteEffectSelector(settingsContent);
 			CreateSettingSimultaneousLineSelector(settingsContent);
 			CreateSettingMusicInfoDisplayModeSelector(settingsContent);
+			CreateSettingMaimaiMusicInfoSeSelector(settingsContent);
 			CreateSettingAutoFakePerfectModeSelector(settingsContent);
 			CreateSettingAutoResultAnimationSelector(settingsContent);
 			CreateSettingScoreMakerPreviewModeSelector(settingsContent);
@@ -505,6 +508,7 @@ namespace Sekai.CustomMusicScoreManager
 			SetSettingNoteEffectIndex(liveSettingData.NoteEffect);
 			SetSettingSimultaneousLine(liveSettingData.UseSimultaneousPushingLine);
 			SetSettingMusicInfoDisplayMode(liveSettingData.CustomMusicScoreMusicInfoDisplayMode ?? LiveSettingData.MusicInfoDisplayModeCustomScore);
+			SetSettingMaimaiMusicInfoSe(liveSettingData.UseMaimaiMusicInfoSe);
 			SetSettingAutoFakePerfectMode(liveSettingData.CustomMusicScoreAutoFakePerfectMode ?? LiveSettingData.AutoFakePerfectModeAuto);
 			SetSettingAutoResultAnimation(liveSettingData.AutoResultAnimationMode);
 			SetSettingLiveBackgroundMode(liveSettingData.CustomMusicScoreLiveBackgroundMode ?? LiveSettingData.CustomMusicScoreBackgroundMode2DMV);
@@ -668,6 +672,7 @@ namespace Sekai.CustomMusicScoreManager
 			liveSettingData.NoteEffect = _settingNoteEffectIndex;
 			liveSettingData.UseSimultaneousPushingLine = _settingSimultaneousLineEnabled;
 			liveSettingData.CustomMusicScoreMusicInfoDisplayMode = _settingMusicInfoDisplayMode;
+			liveSettingData.UseMaimaiMusicInfoSe = _settingUseMaimaiMusicInfoSeEnabled;
 			liveSettingData.CustomMusicScoreAutoFakePerfectMode = _settingAutoFakePerfectMode;
 			liveSettingData.CustomMusicScoreAutoResultAnimation = _settingAutoResultAnimation;
 			liveSettingData.CustomMusicScoreLiveBackgroundMode = _settingLiveBackgroundMode;
@@ -708,6 +713,7 @@ namespace Sekai.CustomMusicScoreManager
 			SetSettingNoteEffectIndex(liveSettingData.NoteEffect);
 			SetSettingSimultaneousLine(liveSettingData.UseSimultaneousPushingLine);
 			SetSettingMusicInfoDisplayMode(liveSettingData.CustomMusicScoreMusicInfoDisplayMode ?? LiveSettingData.MusicInfoDisplayModeCustomScore);
+			SetSettingMaimaiMusicInfoSe(liveSettingData.UseMaimaiMusicInfoSe);
 			SetSettingAutoFakePerfectMode(liveSettingData.CustomMusicScoreAutoFakePerfectMode ?? LiveSettingData.AutoFakePerfectModeAuto);
 			SetSettingAutoResultAnimation(liveSettingData.AutoResultAnimationMode);
 			SetSettingLiveBackgroundMode(liveSettingData.CustomMusicScoreLiveBackgroundMode ?? LiveSettingData.CustomMusicScoreBackgroundMode2DMV);
@@ -1045,6 +1051,47 @@ namespace Sekai.CustomMusicScoreManager
 						break;
 				}
 				_settingMusicInfoDisplayModeLabel.text = labelText;
+			}
+		}
+
+		private void CreateSettingMaimaiMusicInfoSeSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("MaimaiMusicInfoSeSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "舞萌音效", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, string.Empty, CycleSettingMaimaiMusicInfoSe, 220f, 54f);
+			_settingUseMaimaiMusicInfoSeLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetSettingMaimaiMusicInfoSe(false);
+		}
+
+		private void CycleSettingMaimaiMusicInfoSe()
+		{
+			SetSettingMaimaiMusicInfoSe(!_settingUseMaimaiMusicInfoSeEnabled);
+		}
+
+		private void SetSettingMaimaiMusicInfoSe(bool enabled)
+		{
+			_settingUseMaimaiMusicInfoSeEnabled = enabled;
+			if (_settingUseMaimaiMusicInfoSeLabel != null)
+			{
+				_settingUseMaimaiMusicInfoSeLabel.text = enabled ? "开启" : "关闭";
 			}
 		}
 

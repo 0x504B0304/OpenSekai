@@ -182,6 +182,7 @@ namespace Sekai.Live
 				musicStartTween = DOVirtual.DelayedCall(0.1f, () =>
 				{
 					ResolveMusicInfo()?.Play(1f, false, 0f, null, null);
+					PlayMaimaiMusicInfoSe();
 					FadeInBackground(() => PlayStartVoice(1f));
 				}, true);
 				return;
@@ -687,6 +688,35 @@ namespace Sekai.Live
 			screenEffectView ??= GetComponentInChildren<ScreenEffectView>(true);
 			consecutiveAutoLiveView ??= GetComponentInChildren<ConsecutiveAutoLiveView>(true);
 			noteShowRateView ??= GetComponentInChildren<NoteShowRateView>(true);
+		}
+
+		private void PlayMaimaiMusicInfoSe()
+		{
+			if (baseController?.BootData?.LiveSettingData?.UseMaimaiMusicInfoSe != true)
+			{
+				return;
+			}
+
+			if (baseController?.BootData?.IsCustomMusicScore == true &&
+				baseController?.BootData?.LiveSettingData?.SkipsCustomMusicScoreMusicInfo == true)
+			{
+				return;
+			}
+
+			if (baseController?.BootData?.MusicData?.IsTestPlay == true)
+			{
+				return;
+			}
+
+			AudioClip clip = Resources.Load<AudioClip>("maimusicinfo");
+			if (clip != null)
+			{
+				AudioSource.PlayClipAtPoint(clip, Vector3.zero, 2f);
+			}
+			else
+			{
+				Debug.LogError("[MaimaiSE] Failed to load AudioClip from Resources");
+			}
 		}
 
 		private void PlayStartVoice(float durationScale)

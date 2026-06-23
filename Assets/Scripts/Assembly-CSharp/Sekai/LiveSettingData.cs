@@ -179,6 +179,9 @@ namespace Sekai
 		[Key("CustomMusicScoreAutoResultAnimation")]
 		public int? CustomMusicScoreAutoResultAnimation { get; set; }
 
+		[Key("UseMaimaiMusicInfoSe")]
+		public bool UseMaimaiMusicInfoSe { get; set; }
+
 		[IgnoreMember]
 		[JsonIgnore]
 		public bool UsesCustomMusicScoreMusicInfoDisplay
@@ -254,6 +257,7 @@ namespace Sekai
 			LaneTransparent = 1f;
 			CustomMusicScoreMusicInfoDisplayMode = MusicInfoDisplayModeCustomScore;
 			CustomMusicScoreLiveBackgroundMode = CustomMusicScoreBackgroundMode2DMV;
+			UseMaimaiMusicInfoSe = false;
 		}
 
 		public static LiveSettingData LoadFromStorage()
