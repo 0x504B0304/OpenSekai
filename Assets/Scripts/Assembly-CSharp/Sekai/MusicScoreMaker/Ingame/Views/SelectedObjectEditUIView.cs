@@ -1,3 +1,5 @@
+using System.Globalization;
+using Sekai;
 using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Input;
 using Sekai.MusicScoreMaker.Ingame.Models;
@@ -379,9 +381,54 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		}
 
 		private void OnSpeedChangeButtonClick()
+	{
+		MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+		if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
 		{
-			DialogUtility.ShowCommonSubWindowDialog("单键变速测试");
+			return;
 		}
+
+		// 获取第一个选中音符的 speedRatio
+		MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+		float currentSpeedRatio = firstNote?.speedRatio ?? 1f;
+
+		AddMusicScoreEventDataDialog dialog = null;
+		dialog = ScreenManager.Instance?.Show2ButtonDialog<AddMusicScoreEventDataDialog>(
+			DialogType.AddMusicScoreEventDataDialog,
+			null,
+			"WORD_DECIDE",
+			"WORD_CANCEL",
+			() =>
+			{
+				// 确认按钮回调：更新所有选中音符的 speedRatio
+				if (dialog != null && data != null && data.SelectedNoteIdList != null)
+				{
+					if (float.TryParse(dialog.InputFieldText, NumberStyles.Float, CultureInfo.InvariantCulture, out float newSpeedRatio))
+					{
+						foreach (int noteId in data.SelectedNoteIdList)
+						{
+							MusicScoreNoteBase note = data.FindNote(noteId);
+							if (note != null)
+							{
+								note.speedRatio = newSpeedRatio;
+							}
+						}
+						MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+					}
+				}
+			},
+			null,
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			allowCloseExternal: true);
+
+		if (dialog == null)
+		{
+			return;
+		}
+
+		dialog.Setup(MusicScoreEventType.HighSpeed, initialHighSpeed: currentSpeedRatio);
+	}
 
 		private void AdjustPositionToFitScreen()
 		{

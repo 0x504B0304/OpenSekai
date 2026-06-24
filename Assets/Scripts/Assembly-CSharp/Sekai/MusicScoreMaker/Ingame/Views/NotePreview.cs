@@ -6,6 +6,7 @@ using Sekai.MusicScoreMaker.Ingame.Input;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.UI;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
@@ -62,6 +63,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private RectTransform _rectTransform;
+
+		private CustomTextMesh _speedRatioText;
 
 		private RectTransform _parentRectTransform;
 
@@ -163,11 +166,38 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			_rectTransform ??= GetComponent<RectTransform>();
 			NoteId = UNUSED_ID;
+			CreateSpeedRatioText();
 			InitializeMaterials();
 			if (toolInputHandler != null)
 			{
 				toolInputHandler.RemoveAllAndAddListener(OnClick, null, OnDrag, OnPointerDown, OnPointerUp);
 			}
+		}
+
+		private void CreateSpeedRatioText()
+		{
+			GameObject textObj = new GameObject("SpeedRatioText");
+			textObj.transform.SetParent(transform);
+
+			RectTransform rectTransform = textObj.AddComponent<RectTransform>();
+			rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+			rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+			rectTransform.anchoredPosition = new Vector2(0f, 70f);
+			rectTransform.sizeDelta = new Vector2(150f, 40f);
+			rectTransform.localScale = new Vector3(1.5f, 1.5f, 1f);
+
+			textObj.AddComponent<CanvasRenderer>();
+
+			_speedRatioText = textObj.AddComponent<CustomTextMesh>();
+			_speedRatioText.fontSize = 32;
+			_speedRatioText.color = Color.white;
+			_speedRatioText.text = "";
+			_speedRatioText.alignment = TextAlignmentOptions.Center;
+
+			// 设置层级在最上方，确保显示在 note 之上
+			textObj.transform.SetAsLastSibling();
+
+			textObj.gameObject.SetActive(false);
 		}
 
 		public void SetNoteScaleMultiplier(float multiplier)
@@ -249,6 +279,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			gameObject.SetActive(true);
 			SetImage(noteBase.type, noteBase.category, noteBase.direction, noteBase.isSkip);
 			UpdateSelectedIndicator(noteBase, MusicScoreMakerData);
+			UpdateNote(noteBase);
 			if (noteBase.isSkip)
 			{
 				Dictionary<int, MusicScoreNoteBase> noteIdCache = MusicScoreMakerData.GetNoteIdCacheOrRebuild();
@@ -288,6 +319,21 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			bool isSelected = MusicScoreMakerData?.SelectedNoteTargetIdSet?.Contains(noteBase.id) == true;
 			UpdateNoteColor(isSelected);
+		}
+
+		public void UpdateNote(MusicScoreNoteBase note)
+		{
+			// 显示速度比率文字
+			if (_speedRatioText != null)
+			{
+				bool shouldShowSpeedRatio = note != null && note.speedRatio != 1.0f;
+				_speedRatioText.gameObject.SetActive(shouldShowSpeedRatio);
+				if (shouldShowSpeedRatio)
+				{
+					_speedRatioText.text = $"{note.speedRatio}x";
+					_speedRatioText.color = Color.white;
+				}
+			}
 		}
 
 		private void UpdateNoteColor(bool isSelected)
