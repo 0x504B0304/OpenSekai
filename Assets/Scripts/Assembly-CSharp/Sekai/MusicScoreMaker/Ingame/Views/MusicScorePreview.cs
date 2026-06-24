@@ -379,6 +379,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				isLeftExpand = GetIsShowExpand(musicScore),
 				isRightExpand = GetIsShowExpand(musicScore),
 				isSelectAllConnectedNotes = GetIsShowSelectAllConnectedNotes(musicScore, hasSelectedNotes, hasSelectedEvents),
+				isSpeedChange = GetIsShowSpeedChange(musicScore, hasSelectedNotes),
 				anchoredPosition = anchoredPosition,
 				sizeDelta = sizeDelta,
 				coordinateSpaceTransform = _notesView != null ? _notesView.RectTransform : null,
@@ -432,6 +433,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private static bool GetIsShowSelectAllConnectedNotes(MusicScoreMakerData musicScore, bool hasSelectedNotes, bool hasSelectedEvents)
 		{
 			return hasSelectedNotes && MusicScoreMakerUtility.HasPartiallySelectedConnectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild());
+		}
+
+		private static bool GetIsShowSpeedChange(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			return MusicScoreMakerUtility.CanCopySelectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild());
 		}
 
 		private void CalculateSelectedObjectsBounds(MusicScoreMakerData musicScore, long startTicks, long endTicks, out Vector2? anchoredPosition, out Vector2? sizeDelta)

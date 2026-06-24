@@ -2,6 +2,7 @@ using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Input;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
+using Sekai.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -26,6 +27,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private DispatcherEventBaseButton _selectAllConnectedNotesButton;
+
+		[SerializeField]
+		private DispatcherEventBaseButton _speedChangeButton;
 
 		[SerializeField]
 		private ToolInputHandler _expandLeftInputHandler;
@@ -95,6 +99,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			SetupEventDispatcher();
 		}
 
+		private void Start()
+		{
+			SetupSpeedChangeButton();
+		}
+
 		private void OnDestroy()
 		{
 			if (_expandLeftInputHandler != null)
@@ -109,6 +118,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				_moveInputHandler.RemoveAllListeners();
 			}
+			CleanupSpeedChangeButton();
 			RemoveEventDispatcher();
 		}
 
@@ -166,6 +176,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_copyButton.SetActive(eventData.isCopy);
 			_deleteButton.SetActive(eventData.isDelete);
 			_selectAllConnectedNotesButton.SetActive(eventData.isSelectAllConnectedNotes);
+			_speedChangeButton.SetActive(eventData.isSpeedChange);
 			_expandLeftInputHandler.SetActive(eventData.isLeftExpand);
 			_expandRightInputHandler.SetActive(eventData.isRightExpand);
 			gameObject.SetActive(eventData.isShow);
@@ -341,6 +352,35 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		public static bool IsExpandInputDragging()
 		{
 			return _sIsExpandInputDragging;
+		}
+
+		private void SetupSpeedChangeButton()
+		{
+			if (_speedChangeButton != null)
+			{
+				CustomButton button = _speedChangeButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnSpeedChangeButtonClick);
+				}
+			}
+		}
+
+		private void CleanupSpeedChangeButton()
+		{
+			if (_speedChangeButton != null)
+			{
+				CustomButton button = _speedChangeButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnSpeedChangeButtonClick);
+				}
+			}
+		}
+
+		private void OnSpeedChangeButtonClick()
+		{
+			DialogUtility.ShowCommonSubWindowDialog("单键变速测试");
 		}
 
 		private void AdjustPositionToFitScreen()
