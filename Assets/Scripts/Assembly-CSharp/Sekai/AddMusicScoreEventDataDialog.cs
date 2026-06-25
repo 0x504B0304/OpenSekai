@@ -192,7 +192,7 @@ namespace Sekai
 
 		private static string FormatHighSpeedForInput(float value)
 		{
-			return value.ToString("0.0", CultureInfo.InvariantCulture);
+			return value.ToString("0.00", CultureInfo.InvariantCulture);
 		}
 
 		private void OnBpmInputEndEdit(string value)
