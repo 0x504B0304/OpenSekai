@@ -427,6 +427,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			return;
 		}
 
+		// 隐藏删除按钮
+		dialog.HideDeleteButton();
 		dialog.Setup(MusicScoreEventType.HighSpeed, initialHighSpeed: currentSpeedRatio);
 	}
 

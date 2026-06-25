@@ -50,7 +50,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		public NoteType type;
 
 		[Key(6)]
-		public float speedRatio;
+		public float speedRatio = 1f;
 
 		[Key(7)]
 		public NoteLineType noteLineType;

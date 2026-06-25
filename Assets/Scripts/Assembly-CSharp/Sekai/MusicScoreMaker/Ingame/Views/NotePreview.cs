@@ -182,7 +182,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			RectTransform rectTransform = textObj.AddComponent<RectTransform>();
 			rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
 			rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-			rectTransform.anchoredPosition = new Vector2(0f, 70f);
+			rectTransform.anchoredPosition = new Vector2(0f, 0f);
 			rectTransform.sizeDelta = new Vector2(150f, 40f);
 			rectTransform.localScale = new Vector3(1.5f, 1.5f, 1f);
 
@@ -190,7 +190,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 			_speedRatioText = textObj.AddComponent<CustomTextMesh>();
 			_speedRatioText.fontSize = 32;
-			_speedRatioText.color = Color.white;
+			_speedRatioText.color = Color.black;
 			_speedRatioText.text = "";
 			_speedRatioText.alignment = TextAlignmentOptions.Center;
 
@@ -323,15 +323,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void UpdateNote(MusicScoreNoteBase note)
 		{
-			// 显示速度比率文字
+			// 显示速度比率文字（只有设置了单键变速且值不为1.0的note才显示）
 			if (_speedRatioText != null)
 			{
-				bool shouldShowSpeedRatio = note != null && note.speedRatio != 1.0f;
+				bool shouldShowSpeedRatio = note != null && Mathf.Abs(note.speedRatio - 1.0f) > 0.001f;
 				_speedRatioText.gameObject.SetActive(shouldShowSpeedRatio);
 				if (shouldShowSpeedRatio)
 				{
 					_speedRatioText.text = $"{note.speedRatio}x";
-					_speedRatioText.color = Color.white;
+					_speedRatioText.color = Color.black;
 				}
 			}
 		}
