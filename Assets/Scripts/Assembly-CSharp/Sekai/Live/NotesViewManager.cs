@@ -162,7 +162,7 @@ namespace Sekai.Live
 				spawnNoteDict[note] = noteView;
 			}
 
-			if (isEnablePairNotesLine && note.PairNote != null)
+			if (isEnablePairNotesLine && note.PairNote != null && !(note is NoteBase decorationNote && decorationNote.IsDecoration))
 			{
 				pairNoteLineView?.Add(note);
 			}
