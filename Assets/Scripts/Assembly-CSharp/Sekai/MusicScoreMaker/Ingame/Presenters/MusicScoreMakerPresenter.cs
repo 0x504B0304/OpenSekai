@@ -4961,6 +4961,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Register<OnExpandInputPointerUpEvent>(OnExpandInputPointerUp);
 			dispatcher.Register<SelectAllConnectedNotesEvent>(SelectAllConnectedNotes);
 			dispatcher.Register<SetFocusTicksEvent>(OnSetFocusTicksForAreaSelect);
+			// 键盘快捷键事件
+			dispatcher.Register<DeleteSelectedNotesAndEventsEvent>(DeleteSelectedNotesAndEvents);
+			dispatcher.Register<ShowIncompleteSelectionWarningEvent>(ShowIncompleteSelectionWarning);
 		}
 
 		private void DisposePreviewEventDispatcher()
@@ -4984,6 +4987,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Remove<OnExpandInputPointerUpEvent>(OnExpandInputPointerUp);
 			dispatcher.Remove<SelectAllConnectedNotesEvent>(SelectAllConnectedNotes);
 			dispatcher.Remove<SetFocusTicksEvent>(OnSetFocusTicksForAreaSelect);
+			// 键盘快捷键事件
+			dispatcher.Remove<DeleteSelectedNotesAndEventsEvent>(DeleteSelectedNotesAndEvents);
+			dispatcher.Remove<ShowIncompleteSelectionWarningEvent>(ShowIncompleteSelectionWarning);
 		}
 
 		private void OnNotePreviewClick(OnNotePreviewClickEvent obj)
@@ -5824,6 +5830,46 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			bool previousSelected = note.previousConnectionId == -1 || selectedNoteIds.Contains(note.previousConnectionId);
 			bool nextSelected = note.nextConnectionId == -1 || selectedNoteIds.Contains(note.nextConnectionId);
 			return previousSelected && nextSelected;
+		}
+
+		/// <summary>
+		/// 处理删除选中音符和事件的事件（Delete键或Ctrl+X剪切时触发）
+		/// </summary>
+		private void DeleteSelectedNotesAndEvents(DeleteSelectedNotesAndEventsEvent evt)
+		{
+			if (_model?.IsEditRestricted == true)
+			{
+				return;
+			}
+			RemoveSelectedAndTemporaryNotesAndEventList();
+		}
+
+		/// <summary>
+		/// 显示不完整选择警告对话框
+		/// 当用户尝试对部分选中的长条或引导线进行复制/剪切/删除操作时显示
+		/// </summary>
+		private void ShowIncompleteSelectionWarning(ShowIncompleteSelectionWarningEvent evt)
+		{
+			if (evt == null)
+			{
+				return;
+			}
+			string actionType = evt.ActionType;
+			string actionName = actionType;
+			switch (actionType)
+			{
+				case "copy":
+					actionName = "复制";
+					break;
+				case "cut":
+					actionName = "剪切";
+					break;
+				case "delete":
+					actionName = "删除";
+					break;
+			}
+			// 显示提示消息
+			UnityEngine.Debug.LogWarning($"[MusicScoreMaker] 无法执行 {actionName} 操作：长条或引导线未完整选中。请选中所有连接的音符后再操作。");
 		}
 
 		private void ShowClipboardCacheList(ShowClipboardCacheListEvent evt)

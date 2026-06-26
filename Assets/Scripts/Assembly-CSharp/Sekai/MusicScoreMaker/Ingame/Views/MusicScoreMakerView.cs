@@ -586,6 +586,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private void Update()
 		{
 			_presenterUpdateAction?.Invoke();
+			// 处理键盘快捷键（仅Windows平台）
+			MusicScoreMakerKeyboardHandler.HandleKeyboardInput();
 		}
 
 		private void RegisterEvents()
