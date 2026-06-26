@@ -324,6 +324,14 @@ namespace Sekai.Live
 			set;
 		}
 
+		public virtual bool IsDecoration
+		{
+			[CompilerGenerated]
+			get;
+			[CompilerGenerated]
+			set;
+		}
+
 		[JsonIgnore]
 		public virtual int Id
 		{
@@ -430,6 +438,11 @@ namespace Sekai.Live
 			IsSkip = skip;
 		}
 
+		public virtual void SetDecoration(bool decoration)
+		{
+			IsDecoration = decoration;
+		}
+
 		public virtual void Excute(MusicScoreInfo currentFrameInfo, float offsetTime)
 		{
 			this.offsetTime = offsetTime;
@@ -458,7 +471,8 @@ namespace Sekai.Live
 			}
 
 			Progress = progress;
-			if (OffsetJudgeTime > LiveConfig.noteTypeJudgeData.JudgeTimeAfter)
+			// Decoration notes should not be marked as Last/Miss, they are auto-judged in LiveLogic
+			if (OffsetJudgeTime > LiveConfig.noteTypeJudgeData.JudgeTimeAfter && !IsDecoration)
 			{
 				State = NoteState.Last;
 			}

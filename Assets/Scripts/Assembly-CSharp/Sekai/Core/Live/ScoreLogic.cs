@@ -75,7 +75,8 @@ namespace Sekai.Core.Live
 
 		public virtual void UpdateCombo(NoteBase note)
 		{
-			if (note == null || note.Result == NoteResult.None)
+			// Decoration notes are auto-judged and should not affect combo
+			if (note == null || note.Result == NoteResult.None || note.IsDecoration)
 			{
 				return;
 			}
@@ -96,6 +97,12 @@ namespace Sekai.Core.Live
 
 		public virtual void UpdateNoteResult(NoteBase note)
 		{
+			// Decoration notes are auto-judged and should not affect score counts
+			if (note != null && note.IsDecoration)
+			{
+				return;
+			}
+
 			switch (note?.Result)
 			{
 				case NoteResult.JustPerfect:
@@ -138,7 +145,8 @@ namespace Sekai.Core.Live
 
 		public virtual int CalculateAddScore(NoteBase note, float factor = 1f)
 		{
-			if (note == null)
+			// Decoration notes do not contribute to score
+			if (note == null || note.IsDecoration)
 			{
 				return 0;
 			}

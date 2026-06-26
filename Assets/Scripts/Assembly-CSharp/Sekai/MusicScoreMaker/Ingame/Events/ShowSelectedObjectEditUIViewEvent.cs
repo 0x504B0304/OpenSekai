@@ -86,6 +86,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 			set;
 		}
 
+		public bool isDecoration
+		{
+			[CompilerGenerated]
+			get;
+			[CompilerGenerated]
+			set;
+		}
+
 		public Vector2? anchoredPosition
 		{
 			[CompilerGenerated]

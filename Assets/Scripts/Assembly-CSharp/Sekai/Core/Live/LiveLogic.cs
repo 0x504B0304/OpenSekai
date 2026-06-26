@@ -377,6 +377,9 @@ namespace Sekai.Core.Live
 					continue;
 				}
 
+				// Decoration notes need to be processed after Excute to check OffsetJudgeTime
+				// Skip early decoration check here - will be handled after Excute
+
 				if (!Mathf.Approximately(note.speedRatio, 1f))
 				{
 					if (i == noteStartIndex)
@@ -396,11 +399,18 @@ namespace Sekai.Core.Live
 					offsetTime = -offsetTime;
 				}
 				note.Excute(currentFrameInfo, offsetTime);
+				
+				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
+				if (note.IsDecoration && note.OffsetJudgeTime >= 0 && note.State != NoteState.Done)
+				{
+					DecorationJudgment(note);
+				}
+				
 				if (note.State == NoteState.Done && i == noteStartIndex)
 				{
 					noteStartIndex++;
 				}
-				else if (note.State != NoteState.Done)
+				else if (note.State != NoteState.Done && !note.IsDecoration)
 				{
 					UpdateJudgmentNoteArray(note);
 				}
@@ -427,6 +437,9 @@ namespace Sekai.Core.Live
 					continue;
 				}
 
+				// Decoration notes need to be processed after Excute to check OffsetJudgeTime
+				// Skip early decoration check here - will be handled after Excute
+
 				float offsetTime = currentFrameInfo.time >= note.MusicScoreInfo.time
 					? noteDisplayTimeOffset
 					: CalcTimeOffset(note);
@@ -436,15 +449,39 @@ namespace Sekai.Core.Live
 				}
 
 				note.Excute(currentFrameInfo, offsetTime);
+				
+				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
+				if (note.IsDecoration && note.OffsetJudgeTime >= 0 && note.State != NoteState.Done)
+				{
+					DecorationJudgment(note);
+				}
+				
 				if (note.State == NoteState.Done && i == highSpeedNoteStartIndex)
 				{
 					highSpeedNoteStartIndex++;
 				}
-				else if (note.State != NoteState.Done)
+				else if (note.State != NoteState.Done && !note.IsDecoration)
 				{
 					UpdateJudgmentNoteArray(note);
 				}
 			}
+		}
+
+		private void DecorationJudgment(NoteBase note)
+		{
+			if (note == null || note.State == NoteState.Done)
+			{
+				return;
+			}
+			// Decoration notes are auto-judged when reaching judgment time
+			// Play tap effect and SE, but do not trigger score/combo callbacks or judgment text
+			
+			// Play judgment effect (tap effect and SE)
+			LiveViewExt.JudgmentNote(liveViews, note);
+			
+			// Mark as done and unspawn the note visual
+			note.SetStateUnnotice(NoteState.Done);
+			LiveViewExt.UnspawnNote(liveViews, note);
 		}
 
 		private void AdvanceFinishedNotes()
@@ -479,7 +516,8 @@ namespace Sekai.Core.Live
 		{
 			// FrictionHideLongNote itself has no scoring judgment, but it is the hidden input carrier for trace long notes.
 			// It must still receive held input frames so its generated LongHoldCombo points are judged by LongNote.Judgment.
-			if (note != null && (note.HasJudgment || note is FrictionHideLongNote))
+			// Decoration notes are auto-judged and should not receive player input.
+			if (note != null && !note.IsDecoration && (note.HasJudgment || note is FrictionHideLongNote))
 			{
 				judgmentNoteList.Add(note);
 			}

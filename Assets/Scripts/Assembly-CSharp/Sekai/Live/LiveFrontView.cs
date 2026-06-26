@@ -254,6 +254,14 @@ namespace Sekai.Live
 				return;
 			}
 
+			// Decoration notes: play tap effect and SE, but do not show judgment text
+			if (note.IsDecoration)
+			{
+				Effect(note);
+				return;
+			}
+
+			// Normal notes: play effect and show judgment text
 			Effect(note);
 			judgmentView?.Excute(note.JudgeInfo);
 			judgmentDescriptionView?.Excute(note.JudgeInfo);

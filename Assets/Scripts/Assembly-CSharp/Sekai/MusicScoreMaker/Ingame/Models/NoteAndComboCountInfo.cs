@@ -53,7 +53,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 			foreach (MusicScoreNoteBase note in noteList)
 			{
-				if (note != null)
+				// Decoration notes do not count toward combo
+				if (note != null && !note.isDecoration)
 				{
 					UpdateCountInfo(ref info, note.category);
 				}
@@ -110,7 +111,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 				foreach (NoteBase childNote in note.NoteList)
 				{
-					if (childNote != null && IsComboEnabled(childNote))
+					// Decoration notes do not count toward combo
+					if (childNote != null && !childNote.IsDecoration && IsComboEnabled(childNote))
 					{
 						UpdateCountInfo(ref info, childNote.Category);
 					}

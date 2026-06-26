@@ -380,6 +380,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				isRightExpand = GetIsShowExpand(musicScore),
 				isSelectAllConnectedNotes = GetIsShowSelectAllConnectedNotes(musicScore, hasSelectedNotes, hasSelectedEvents),
 				isSpeedChange = GetIsShowSpeedChange(musicScore, hasSelectedNotes),
+				isDecoration = GetIsShowDecoration(musicScore, hasSelectedNotes),
 				anchoredPosition = anchoredPosition,
 				sizeDelta = sizeDelta,
 				coordinateSpaceTransform = _notesView != null ? _notesView.RectTransform : null,
@@ -442,6 +443,36 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				return false;
 			}
 			return MusicScoreMakerUtility.CanCopySelectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild());
+		}
+
+		private static bool GetIsShowDecoration(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			// 检查是否为完整的长条组合
+			if (!MusicScoreMakerUtility.CanCopySelectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild()))
+			{
+				return false;
+			}
+			// 检查是否包含引导线（Guide类型的音符）
+			foreach (int noteId in musicScore.SelectedNoteTargetIdSet)
+			{
+				MusicScoreNoteBase note = musicScore.FindNote(noteId);
+				if (note != null && IsGuideNoteType(note.noteBaseType))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private static bool IsGuideNoteType(MusicScoreNoteBase.NoteBaseType noteBaseType)
+		{
+			return noteBaseType == MusicScoreNoteBase.NoteBaseType.Guide ||
+				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideEnd ||
+				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideHiddenConnection;
 		}
 
 		private void CalculateSelectedObjectsBounds(MusicScoreMakerData musicScore, long startTicks, long endTicks, out Vector2? anchoredPosition, out Vector2? sizeDelta)

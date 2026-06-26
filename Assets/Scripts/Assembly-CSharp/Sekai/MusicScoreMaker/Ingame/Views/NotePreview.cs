@@ -194,6 +194,13 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_speedRatioText.text = "";
 			_speedRatioText.alignment = TextAlignmentOptions.Center;
 
+			// 加载支持中文的动态字体
+			TMP_FontAsset dynamicFont = Resources.Load<TMP_FontAsset>("font/FOT-RodinNTLGPro-EB SDF_Dynamic");
+			if (dynamicFont != null)
+			{
+				_speedRatioText.font = dynamicFont;
+			}
+
 			// 设置层级在最上方，确保显示在 note 之上
 			textObj.transform.SetAsLastSibling();
 
@@ -323,14 +330,33 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void UpdateNote(MusicScoreNoteBase note)
 		{
-			// 显示速度比率文字（只有设置了单键变速且值不为1.0的note才显示）
+			// 显示速度和装饰文字
 			if (_speedRatioText != null)
 			{
-				bool shouldShowSpeedRatio = note != null && Mathf.Abs(note.speedRatio - 1.0f) > 0.001f;
-				_speedRatioText.gameObject.SetActive(shouldShowSpeedRatio);
-				if (shouldShowSpeedRatio)
+				bool isDecoration = note != null && note.isDecoration;
+				bool hasSpeedRatio = note != null && Mathf.Abs(note.speedRatio - 1.0f) > 0.001f;
+
+				bool shouldShowText = isDecoration || hasSpeedRatio;
+				_speedRatioText.gameObject.SetActive(shouldShowText);
+
+				if (shouldShowText)
 				{
-					_speedRatioText.text = $"{note.speedRatio}x";
+					// 组合显示格式
+					if (isDecoration && hasSpeedRatio)
+					{
+						// 同时有装饰和单键变速：显示 "<速度>(装饰)"
+						_speedRatioText.text = $"{note.speedRatio}x(装饰)";
+					}
+					else if (isDecoration)
+					{
+						// 只有装饰：显示 "(装饰)"
+						_speedRatioText.text = "(装饰)";
+					}
+					else if (hasSpeedRatio)
+					{
+						// 只有单键变速：显示 "<速度>x"
+						_speedRatioText.text = $"{note.speedRatio}x";
+					}
 					_speedRatioText.color = Color.black;
 				}
 			}

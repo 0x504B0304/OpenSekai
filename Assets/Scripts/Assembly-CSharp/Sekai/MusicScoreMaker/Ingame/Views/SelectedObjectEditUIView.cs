@@ -34,6 +34,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private DispatcherEventBaseButton _speedChangeButton;
 
 		[SerializeField]
+		private DispatcherEventBaseButton _decorationButton;
+
+		[SerializeField]
 		private ToolInputHandler _expandLeftInputHandler;
 
 		[SerializeField]
@@ -104,6 +107,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private void Start()
 		{
 			SetupSpeedChangeButton();
+			SetupDecorationButton();
 		}
 
 		private void OnDestroy()
@@ -121,6 +125,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				_moveInputHandler.RemoveAllListeners();
 			}
 			CleanupSpeedChangeButton();
+			CleanupDecorationButton();
 			RemoveEventDispatcher();
 		}
 
@@ -179,6 +184,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_deleteButton.SetActive(eventData.isDelete);
 			_selectAllConnectedNotesButton.SetActive(eventData.isSelectAllConnectedNotes);
 			_speedChangeButton.SetActive(eventData.isSpeedChange);
+			_decorationButton.SetActive(eventData.isDecoration);
 			_expandLeftInputHandler.SetActive(eventData.isLeftExpand);
 			_expandRightInputHandler.SetActive(eventData.isRightExpand);
 			gameObject.SetActive(eventData.isShow);
@@ -431,6 +437,73 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		dialog.HideDeleteButton();
 		dialog.Setup(MusicScoreEventType.HighSpeed, initialHighSpeed: currentSpeedRatio);
 	}
+
+		private void SetupDecorationButton()
+		{
+			if (_decorationButton != null)
+			{
+				CustomButton button = _decorationButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnDecorationButtonClick);
+				}
+			}
+		}
+
+		private void CleanupDecorationButton()
+		{
+			if (_decorationButton != null)
+			{
+				CustomButton button = _decorationButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnDecorationButtonClick);
+				}
+			}
+		}
+
+		private void OnDecorationButtonClick()
+		{
+			MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+			if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
+			{
+				return;
+			}
+
+			// 获取第一个选中音符的 isDecoration 状态
+			MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+			bool isCurrentlyDecoration = firstNote?.isDecoration ?? false;
+
+			// 根据当前状态显示不同的提示文字
+			string messageKey = isCurrentlyDecoration ? "MSG_CANCEL_DECORATION_NOTE" : "MSG_SET_DECORATION_NOTE";
+
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				messageKey,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() =>
+				{
+					// 确认按钮回调：更新所有选中音符的 isDecoration 状态
+					if (data != null && data.SelectedNoteIdList != null)
+					{
+						bool newDecorationState = !isCurrentlyDecoration;
+						foreach (int noteId in data.SelectedNoteIdList)
+						{
+							MusicScoreNoteBase note = data.FindNote(noteId);
+							if (note != null)
+							{
+								note.isDecoration = newDecorationState;
+							}
+						}
+						MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+					}
+				},
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true);
+		}
 
 		private void AdjustPositionToFitScreen()
 		{

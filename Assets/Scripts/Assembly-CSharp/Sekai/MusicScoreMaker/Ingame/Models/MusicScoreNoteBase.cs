@@ -5,6 +5,7 @@ using MessagePack;
 using Newtonsoft.Json;
 using Sekai.Live;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
+using UnityEngine;
 
 namespace Sekai.MusicScoreMaker.Ingame.Models
 {
@@ -70,6 +71,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		[Key(12)]
 		public bool isSkip;
 
+		[Key(13)]
+		public bool isDecoration;
+
 		[JsonIgnore]
 		[IgnoreMember]
 		[field: NonSerialized]
@@ -109,7 +113,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			ConnectedNotes = new List<MusicScoreNoteBase>();
 		}
 
-		public MusicScoreNoteBase(int id, long ticks, int laneStart, int laneEnd, NoteCategory category, NoteType type = NoteType.Default, float speedRatio = 1f, NoteLineType noteLineType = NoteLineType.Linear, NoteBaseType noteBaseType = NoteBaseType.Normal, bool isSkip = false, NoteDirection direction = NoteDirection.Default, int previousConnectionId = -1, int nextConnectionId = -1)
+		public MusicScoreNoteBase(int id, long ticks, int laneStart, int laneEnd, NoteCategory category, NoteType type = NoteType.Default, float speedRatio = 1f, NoteLineType noteLineType = NoteLineType.Linear, NoteBaseType noteBaseType = NoteBaseType.Normal, bool isSkip = false, NoteDirection direction = NoteDirection.Default, int previousConnectionId = -1, int nextConnectionId = -1, bool isDecoration = false)
 		{
 			this.id = id;
 			this.ticks = ticks;
@@ -124,6 +128,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			this.nextConnectionId = nextConnectionId;
 			this.direction = direction;
 			this.isSkip = isSkip;
+			this.isDecoration = isDecoration;
 			ConnectedNotes = new List<MusicScoreNoteBase>();
 		}
 
@@ -206,7 +211,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				noteBase.LineType,
 				baseType,
 				noteBase.IsSkip,
-				noteBase.Direction);
+				noteBase.Direction,
+				-1,
+				-1,
+				noteBase.IsDecoration);
 		}
 
 		public NoteBase ToNoteBase(LiveBundleBuildData bundleBuildData, List<MusicScoreNoteBase> noteArray, MusicScoreInfo[] musicScoreInfos, MusicScoreMakerData musicScoreMakerData)
@@ -264,16 +272,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			case NoteBaseType.Connection:
 				note = new ConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.HiddenConnection:
 				note = new HiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.LongHoldCombo:
 				note = new LongHoldCombo(musicScoreInfo, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData));
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
 				longNote?.AddHoldCombo((LongHoldCombo)note);
 				return note;
 			case NoteBaseType.FrictionLong:
@@ -304,12 +315,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			case NoteBaseType.GuideHiddenConnection:
 				note = new GuideHiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, bundleBuildData, noteBase.type, noteBase.speedRatio, noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
 				longNote?.AddConnectionNote(note);
 				return note;
 			default:
 				throw new ArgumentOutOfRangeException(nameof(noteBase.noteBaseType), noteBase.noteBaseType, null);
 			}
 			note.SetSkip(noteBase.isSkip);
+			note.SetDecoration(noteBase.isDecoration);
 			SetParent(longNote, note);
 			return note;
 		}
@@ -478,6 +491,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				nextConnectionId = nextConnectionId,
 				direction = direction,
 				isSkip = isSkip,
+				isDecoration = isDecoration,
 				ConnectedNotes = new List<MusicScoreNoteBase>(ConnectedNotes)
 			};
 		}

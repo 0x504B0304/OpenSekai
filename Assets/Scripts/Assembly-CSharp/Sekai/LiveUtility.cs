@@ -180,7 +180,8 @@ namespace Sekai
 
 				foreach (NoteBase note in rootNote.NoteList)
 				{
-					if (note != null && note.HasJudgment)
+					// Decoration notes do not count toward combo
+					if (note != null && !note.IsDecoration && note.HasJudgment)
 					{
 						count++;
 					}
