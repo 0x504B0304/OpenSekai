@@ -11,6 +11,7 @@ Library: G:\qqggdexiangmu\OpenSekai\Temp\BurstOutput\tempburstlibs\armeabi-v7a\l
 --float-mode=Fast
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=G:\qqggdexiangmu\OpenSekai\Temp\Burst
+--debug=Full
 --key-folder=G:/Program Files/Unity/2022.3.62f3/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=G:\qqggdexiangmu\OpenSekai\Library\Burst
 --output=G:\qqggdexiangmu\OpenSekai\Temp\BurstOutput\tempburstlibs\armeabi-v7a\lib_burst_generated
@@ -28,6 +29,7 @@ Library: G:\qqggdexiangmu\OpenSekai\Temp\BurstOutput\tempburstlibs\armeabi-v7a\l
 --target-framework=NetFramework
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=G:\qqggdexiangmu\OpenSekai\Temp\Burst
+--debug=Full
 --key-folder=G:/Program Files/Unity/2022.3.62f3/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=G:\qqggdexiangmu\OpenSekai\Library\Burst
 --output=G:\qqggdexiangmu\OpenSekai\Temp\BurstOutput\tempburstlibs\armeabi-v7a\lib_burst_generated
