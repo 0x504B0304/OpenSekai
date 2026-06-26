@@ -293,7 +293,9 @@ namespace Sekai.Live
 				State = NoteState.Last;
 			}
 
+			// Decoration notes: skip input frame check to prevent being marked as Release
 			if ((State == NoteState.InputBegan || State == NoteState.Input)
+				&& !IsDecoration
 				&& lastInputFrame + LiveConfig.noteTypeJudgeData.MissMesh < Time.frameCount)
 			{
 				State = NoteState.Release;

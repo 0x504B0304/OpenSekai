@@ -184,6 +184,18 @@ namespace Sekai.Live
 			if (note is LongNote longNote)
 			{
 				noteLineView?.Remove(longNote);
+				// Unspawn all child notes for decoration long notes
+				if (longNote.IsDecoration && longNote.NoteList != null)
+				{
+					foreach (NoteBase child in longNote.NoteList)
+					{
+						if (child != null && child != longNote && spawnNoteDict != null && spawnNoteDict.TryGetValue(child, out BaseNoteView childView))
+						{
+							childView?.Unspawn();
+							spawnNoteDict.Remove(child);
+						}
+					}
+				}
 			}
 
 			if (spawnNoteDict != null && spawnNoteDict.TryGetValue(note, out BaseNoteView noteView))

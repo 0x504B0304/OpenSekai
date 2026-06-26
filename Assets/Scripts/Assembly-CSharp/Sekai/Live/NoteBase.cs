@@ -409,6 +409,14 @@ namespace Sekai.Live
 			this.state = state;
 		}
 
+		/// <summary>
+		/// Set JudgeInfo for decoration notes to enable effect playback
+		/// </summary>
+		public void SetJudgeInfoForDecoration(NoteResult result)
+		{
+			JudgeInfo = (result, NoteResultDescription.None);
+		}
+
 		public virtual void SetParentNote(LongNote note)
 		{
 			parentNote = note;

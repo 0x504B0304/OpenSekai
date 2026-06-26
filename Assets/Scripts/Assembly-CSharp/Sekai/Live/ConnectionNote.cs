@@ -21,10 +21,17 @@ namespace Sekai.Live
 				return;
 			}
 
+			// Decoration connection notes should not be marked as Last/Miss
+			// Check parent note's decoration status
+			bool isDecorationConnection = IsDecoration || (parentNote != null && parentNote.IsDecoration);
+
 			if (State == NoteState.Last)
 			{
-				JudgeInfo = (NoteResult.Miss, NoteResultDescription.None);
-				State = NoteState.Done;
+				if (!isDecorationConnection)
+				{
+					JudgeInfo = (NoteResult.Miss, NoteResultDescription.None);
+					State = NoteState.Done;
+				}
 				return;
 			}
 
@@ -34,7 +41,8 @@ namespace Sekai.Live
 			}
 
 			Progress = CalcProgress(currentFrameInfo, offsetTime);
-			if (MusicScoreInfo.time <= currentFrameInfo.time)
+			// Decoration connection notes should not be marked as Last
+			if (MusicScoreInfo.time <= currentFrameInfo.time && !isDecorationConnection)
 			{
 				State = NoteState.Last;
 			}

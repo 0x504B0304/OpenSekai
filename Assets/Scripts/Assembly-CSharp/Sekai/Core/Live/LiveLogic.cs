@@ -401,7 +401,8 @@ namespace Sekai.Core.Live
 				note.Excute(currentFrameInfo, offsetTime);
 				
 				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
-				if (note.IsDecoration && note.OffsetJudgeTime >= 0 && note.State != NoteState.Done)
+				// For long notes, trigger at both start and end times
+				if (note.IsDecoration && note.State != NoteState.Done && ShouldTriggerDecorationJudgment(note))
 				{
 					DecorationJudgment(note);
 				}
@@ -451,7 +452,8 @@ namespace Sekai.Core.Live
 				note.Excute(currentFrameInfo, offsetTime);
 				
 				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
-				if (note.IsDecoration && note.OffsetJudgeTime >= 0 && note.State != NoteState.Done)
+				// For long notes, trigger at both start and end times
+				if (note.IsDecoration && note.State != NoteState.Done && ShouldTriggerDecorationJudgment(note))
 				{
 					DecorationJudgment(note);
 				}
@@ -467,21 +469,101 @@ namespace Sekai.Core.Live
 			}
 		}
 
+		private bool ShouldTriggerDecorationJudgment(NoteBase note)
+		{
+			if (note == null)
+			{
+				return false;
+			}
+
+			// For long notes, trigger at both start and end times
+			if (note is LongNote longNote)
+			{
+				// Trigger at start time (head)
+				if (longNote.OffsetJudgeTime >= 0 && longNote.State == NoteState.Playing)
+				{
+					return true;
+				}
+
+				// Trigger at end time (tail)
+				if (longNote.NoteList != null && longNote.NoteList.Count > 0)
+				{
+					NoteBase lastChild = longNote.NoteList[longNote.NoteList.Count - 1];
+					if (lastChild != null && currentFrameInfo.time >= lastChild.MusicScoreInfo.time)
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			// For normal notes, trigger at the judgment time
+			return note.OffsetJudgeTime >= 0;
+		}
+
 		private void DecorationJudgment(NoteBase note)
 		{
 			if (note == null || note.State == NoteState.Done)
 			{
 				return;
 			}
+
 			// Decoration notes are auto-judged when reaching judgment time
 			// Play tap effect and SE, but do not trigger score/combo callbacks or judgment text
-			
-			// Play judgment effect (tap effect and SE)
+
+			// For long notes, handle specially: play head effect at start, keep body showing, play end effect at end
+			if (note is LongNote longNote)
+			{
+				DecorationLongNoteJudgment(longNote);
+				return;
+			}
+
+			// Set JudgeInfo to Perfect for effect playback (TapEffectView checks Result)
+			note.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+			// For normal notes: play effect and remove
 			LiveViewExt.JudgmentNote(liveViews, note);
-			
-			// Mark as done and unspawn the note visual
 			note.SetStateUnnotice(NoteState.Done);
 			LiveViewExt.UnspawnNote(liveViews, note);
+		}
+
+		private void DecorationLongNoteJudgment(LongNote longNote)
+		{
+			if (longNote == null)
+			{
+				return;
+			}
+
+			// Check if we are at the start or end of the long note
+			NoteBase lastChild = longNote.NoteList != null && longNote.NoteList.Count > 0
+				? longNote.NoteList[longNote.NoteList.Count - 1]
+				: null;
+
+			bool isAtEnd = lastChild != null && currentFrameInfo.time >= lastChild.MusicScoreInfo.time;
+			bool isAtStart = longNote.OffsetJudgeTime >= 0 && longNote.State == NoteState.Playing;
+
+			// At start: play head effect, but keep the long note showing (don't mark as Done)
+			if (isAtStart && !isAtEnd && longNote.State != NoteState.InputBegan)
+			{
+				// Set JudgeInfo to Perfect for effect playback (TapEffectView checks Result)
+				longNote.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+				// Play head judgment effect (tap effect and SE)
+				LiveViewExt.JudgmentNote(liveViews, longNote);
+				// Set state to InputBegan to simulate holding (without actual input)
+				longNote.SetStateUnnotice(NoteState.InputBegan);
+			}
+
+			// At end: play end effect using the last child note's type and remove the long note
+			if (isAtEnd && lastChild != null)
+			{
+				// Set JudgeInfo to Perfect for the last child note (actual tail note type)
+				lastChild.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+				// Play end judgment effect using the last child note's type
+				LiveViewExt.JudgmentNote(liveViews, lastChild);
+				// Mark as done and unspawn
+				longNote.SetStateUnnotice(NoteState.Done);
+				LiveViewExt.UnspawnNote(liveViews, longNote);
+			}
 		}
 
 		private void AdvanceFinishedNotes()
