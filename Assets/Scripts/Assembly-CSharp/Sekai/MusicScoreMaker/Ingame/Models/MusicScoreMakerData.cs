@@ -2038,7 +2038,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				|| note is FrictionHideLongNote
 				|| note.Category == NoteCategory.Guide
 				|| note is GuideHiddenConnectionNote
-				|| note.Category == NoteCategory.Combo;
+				|| note.Category == NoteCategory.Combo
+				|| note.IsDecoration;
 		}
 
 		public static void ReapplySetPairNotes(NoteBase[] noteArray)
