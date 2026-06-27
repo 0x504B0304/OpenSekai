@@ -8,11 +8,13 @@ using Sekai.Live;
 using Sekai.MusicScoreMaker.Common;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Presenters;
+using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.UI;
 using SFB;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using CustomMusicScoreManager.Helpers;
 
 namespace Sekai.CustomMusicScoreManager
 {
@@ -143,6 +145,7 @@ namespace Sekai.CustomMusicScoreManager
 		private Button _exportButton;
 		private Button _saveManifestButton;
 		private Button _calculateDurationButton;
+		private Button _generateVideoButton;
 		private Button _audioSelectButton;
 		private Button _jacketSelectButton;
 		private Button _scoreSelectButton;
@@ -386,6 +389,7 @@ namespace Sekai.CustomMusicScoreManager
 			_singerInput = CreateInputField(_manifestFieldGrid, "歌手", "singer");
 			_collaborationLabelInput = CreateInputField(_manifestFieldGrid, "联动标签", "collaborationLabel");
 			_descriptionInput = CreateInputField(_manifestFieldGrid, "描述", "description");
+			_generateVideoButton = CreateButtonField(_manifestFieldGrid, "生成视频", "点击开始", OnGenerateVideoClicked);
 			RectTransform saveRow = CreateRect("SaveManifestRow", detailPanel);
 			SetStretchBottom(saveRow, 28f, 28f, 28f, 64f);
 			HorizontalLayoutGroup saveRowGroup = saveRow.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -2927,6 +2931,249 @@ namespace Sekai.CustomMusicScoreManager
 			}
 		}
 
+		private void OnGenerateVideoClicked()
+	{
+		Debug.Log("[UI] OnGenerateVideoClicked called");
+		ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+			DialogType.Common2ButtonDialog,
+			null,  // messageBodyKey (通过SetMessageBodyText设置)
+			"WORD_DECIDE",  // okButtonLabelKey
+			"WORD_CANCEL",  // cancelButtonLabelKey
+			() => StartVideoGeneration(),  // onClickOK
+			null,  // onClickCancel
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			true)?.SetMessageBodyText("是否开始生成视频？\n期间不可暂停");
+	}
+
+	private void StartVideoGeneration()
+	{
+		Debug.Log("[UI] StartVideoGeneration called");
+
+#if UNITY_ANDROID
+		// Android平台：需要进行权限检查
+		Debug.Log("[UI] Android platform detected, checking permissions");
+		CheckVideoGenerationPermissions();
+#elif UNITY_STANDALONE_WIN || UNITY_EDITOR
+		// Windows平台或编辑器：直接进入创建启动数据流程
+		Debug.Log("[UI] Windows/Editor platform detected, proceeding with video generation");
+		CreateVideoGenerationStartupData();
+#else
+		// 其他平台暂不支持
+		Debug.LogWarning("[UI] Video generation not supported on this platform");
+		SetStatus("当前平台不支持视频生成功能");
+#endif
+	}
+
+	private void CheckVideoGenerationPermissions()
+	{
+		Debug.Log("[UI] CheckVideoGenerationPermissions: Checking gallery permission");
+
+		// 检查是否已有相册权限
+		if (PermissionHelper.HasGalleryPermission())
+		{
+			Debug.Log("[UI] Gallery permission already granted, proceeding with video generation");
+			CreateVideoGenerationStartupData();
+			return;
+		}
+
+		// 申请相册权限
+		Debug.Log("[UI] Gallery permission not granted, requesting permission");
+		PermissionHelper.RequestGalleryPermission((granted) =>
+		{
+			if (granted)
+			{
+				// 权限申请成功，继续视频生成流程
+				Debug.Log("[UI] Gallery permission granted, proceeding with video generation");
+				CreateVideoGenerationStartupData();
+			}
+			else
+			{
+				// 权限申请失败，显示提示并返回首页
+				Debug.LogWarning("[UI] Gallery permission denied");
+				ShowPermissionDeniedDialog();
+			}
+		});
+	}
+
+	/// <summary>
+	/// 显示权限被拒绝的对话框，然后返回首页
+	/// </summary>
+	private void ShowPermissionDeniedDialog()
+	{
+		ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+			DialogType.Common1ButtonDialog,
+			null,  // messageBodyKey (通过SetMessageBodyText设置)
+			"WORD_OK",  // okButtonLabelKey
+			() =>
+			{
+				// 返回首页
+				Debug.Log("[UI] Permission denied, returning to home");
+				ReturnToHome();
+			},
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			true)?.SetMessageBodyText("无法获取相册权限\n请在系统设置中授予应用相册访问权限");
+	}
+
+	/// <summary>
+	/// 返回首页
+	/// </summary>
+	private void ReturnToHome()
+	{
+		// 返回到谱面管理首页
+		try
+		{
+			MusicScoreMaker.Ingame.Utilities.MusicScoreMakerUtility.RequestTransitionToOutGame(MenuScreenType.MusicScoreMakerTop);
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[UI] ReturnToHome异常: {ex.Message}");
+			// 尝试使用ScreenManager直接切换
+			if (ScreenManager.Instance != null)
+			{
+				ScreenManager.Instance.ChangeUIScreen(MenuScreenType.MusicScoreMakerTop, false, true);
+			}
+		}
+	}
+
+	private void CreateVideoGenerationStartupData()
+	{
+		CreateVideoGenerationStartupDataAsync().Forget();
+	}
+
+	private async UniTask CreateVideoGenerationStartupDataAsync()
+	{
+		if (_selected?.Entry == null)
+		{
+			SetStatus("请选择一个谱面。");
+			return;
+		}
+
+		CustomMusicScoreEntry entry = SaveSelectedManifestFromForm(refreshList: false);
+		entry ??= CustomMusicScoreStorage.LoadEntry(_selected.Entry.RootDirectory);
+		if (entry == null)
+		{
+			SetStatus("无法加载谱面。");
+			RefreshList();
+			return;
+		}
+
+		if (!File.Exists(entry.ScorePath))
+		{
+			SetStatus("找不到谱面文件。");
+			return;
+		}
+		if (!File.Exists(entry.AudioPath))
+		{
+			SetStatus("找不到音频文件。");
+			return;
+		}
+
+		MusicScoreMakerData scoreData = entry.LoadScore();
+		if (scoreData == null)
+		{
+			SetStatus("无法加载谱面文件。");
+			return;
+		}
+		if (!HasPlayableNotes(scoreData))
+		{
+			SetStatus("没有可游玩的音符。");
+			return;
+		}
+
+		SetStatus("正在加载音频...");
+		bool audioReady = await entry.RegisterAudioAsync(this.GetCancellationTokenOnDestroy());
+		if (!audioReady)
+		{
+			SetStatus("无法加载音频文件。");
+			return;
+		}
+
+		VideoGenerationBootData bootData = CreateVideoGenerationBootData(entry, scoreData);
+		if (bootData == null)
+		{
+			SetStatus("无法创建视频生成启动数据。");
+			return;
+		}
+
+		UserDataManager.Instance.FreeLiveBootData = bootData;
+		Sekai.Core.EntryPoint.PlayMode = Sekai.Core.PlayMode.SoloLive;
+		LiveTransitioner.SafeForceFinish(null);
+		ScreenManager.Instance?.PushUIScreen(MenuScreenType.LiveLoading, false);
+		SetStatus("正在启动视频生成模式...");
+	}
+
+	private VideoGenerationBootData CreateVideoGenerationBootData(CustomMusicScoreEntry entry, MusicScoreMakerData scoreData)
+	{
+		if (entry == null || scoreData == null)
+		{
+			return null;
+		}
+
+		LiveBundleBuildData liveBundleBuildData = Resources.Load<LiveBundleBuildData>(LiveConfig.ConfigBundleNamePath);
+		MusicScore musicScore = scoreData.ToMusicScore(liveBundleBuildData);
+		int deckId = UserDataManager.Instance.SelectedDeckId;
+		MasterMusicDifficulty difficulty = CreateDirectPlayDifficulty(entry, musicScore);
+		string difficultyString = difficulty?.musicDifficulty ?? "master";
+		LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
+		MusicCategory musicCategory = ResolveDirectPlayMusicCategory(liveSettingData);
+
+		// 创建VideoGenerationBootData实例
+		VideoGenerationBootData bootData = new VideoGenerationBootData(
+			entry.MusicId,
+			difficultyString,
+			0,
+			deckId,
+			LivePlayMode.Free,
+			LiveMusicData.CollaborationModeState.Off,
+			musicCategory);
+
+		bootData.LiveEventData = new LiveEventData(Array.Empty<IngameLotterySkill>(), Array.Empty<IngameComboCutin>(), deckId, true);
+		bootData.LiveSettingData = liveSettingData;
+		bootData.MVQualityType = bootData.LiveSettingData?.QualityType ?? Sekai.MVQualityType.Default;
+		bootData.MusicCategory = musicCategory;
+		bootData.IsAuto = true;
+		bootData.IsCustomMusicScore = true;
+		bootData.IsOfficialMusicScore = false;
+		bootData.ReturnScreenType = MenuScreenType.MusicScoreMakerTop;
+		bootData.canSkipDisplayMusicInfo = false;
+		bootData.ReleaseTransitionBeforeMusicStart = true;
+		bootData.CustomMusicScoreId = entry.Manifest.id;
+		bootData.CustomMusicScorePath = entry.RootDirectory;
+		bootData.CustomMusicScoreTitle = entry.Manifest.scoreTitle;
+		bootData.CustomMusicScoreAuthorName = entry.Manifest.userName;
+		bootData.CustomMusicScoreCollaborationLabel = entry.Manifest.collaborationLabel;
+
+		// 设置视频生成专用属性
+		bootData.IsVideoGenerationMode = true;
+		bootData.VideoGenerationSpeedMultiplier = 1; // 正常速度录制
+		bootData.VideoGenerationMuteAudio = false; // 不静音BGM，录制完整游戏原声（含谱面音乐）
+		bootData.VideoGenerationDisablePause = true;
+		bootData.VideoGenerationAudioPath = null; // 不使用后期添加音乐，直接使用录制的音频
+
+		if (bootData.MusicData != null)
+		{
+			bootData.MusicData.Music = CreateDirectPlayMusic(entry);
+			bootData.MusicData.Difficulty = difficulty;
+			bootData.MusicData.Vocal = CreateDirectPlayVocal(entry);
+			bootData.MusicData.Score = new MasterPlayLevelScore
+			{
+				liveType = LiveType.solo.ToString(),
+				playLevel = entry.Manifest.playLevel
+			};
+			bootData.MusicData.IsTestPlay = false;
+			bootData.MusicData.IsUseCustomScore = true;
+			bootData.MusicData.CustomPlayLevel = entry.Manifest.playLevel;
+			bootData.MusicData.MusicScore = musicScore;
+			bootData.MusicData.StartMusicTimeMs = 0L;
+			// Skip MusicInfo display if skip mode is enabled
+			bootData.MusicData.PlayStartEffectEnabled = !(liveSettingData?.SkipsCustomMusicScoreMusicInfo ?? false);
+		}
+
+		return bootData;
+	}
+
 		private CustomMusicScoreEntry SaveSelectedManifestFromForm(bool refreshList)
 		{
 			if (_selected?.Entry == null)
@@ -3254,6 +3501,46 @@ namespace Sekai.CustomMusicScoreManager
 			input.placeholder = placeholderText;
 			input.targetGraphic = fieldObject.GetComponent<Image>();
 			return input;
+		}
+
+		private static Button CreateButtonField(Transform parent, string label, string buttonText, UnityEngine.Events.UnityAction onClick)
+		{
+			GameObject root = new GameObject(label + "ButtonField", typeof(RectTransform));
+			root.transform.SetParent(parent, false);
+			LayoutElement layoutElement = root.AddComponent<LayoutElement>();
+			layoutElement.preferredHeight = 116f;
+			layoutElement.minHeight = 116f;
+			VerticalLayoutGroup vertical = root.AddComponent<VerticalLayoutGroup>();
+			vertical.spacing = 12f;
+			vertical.childControlWidth = true;
+			vertical.childControlHeight = false;
+
+			TextMeshProUGUI labelText = CreateText("Label", root.transform, label, 23, FontStyles.Bold, TextAlignmentOptions.Left);
+			labelText.rectTransform.sizeDelta = new Vector2(0f, 30f);
+
+			GameObject buttonObject = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
+			buttonObject.transform.SetParent(root.transform, false);
+			RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+			buttonRect.sizeDelta = new Vector2(0f, 70f);
+
+			Image image = buttonObject.GetComponent<Image>();
+			image.color = new Color32(62, 78, 92, 255);
+			Button button = buttonObject.GetComponent<Button>();
+			button.targetGraphic = image;
+			button.transition = Selectable.Transition.ColorTint;
+			ColorBlock colors = button.colors;
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color32(220, 238, 255, 255);
+			colors.pressedColor = new Color32(180, 213, 242, 255);
+			colors.disabledColor = new Color32(120, 126, 132, 120);
+			button.colors = colors;
+			button.onClick.AddListener(onClick);
+
+			TextMeshProUGUI buttonLabel = CreateText("Label", buttonRect, buttonText, 26, FontStyles.Bold, TextAlignmentOptions.Center);
+			buttonLabel.enableWordWrapping = false;
+			buttonLabel.overflowMode = TextOverflowModes.Ellipsis;
+			Stretch(buttonLabel.rectTransform);
+			return button;
 		}
 
 		private static Button CreateFormButton(Transform parent, string name, string label, UnityEngine.Events.UnityAction onClick)

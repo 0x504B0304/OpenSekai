@@ -492,6 +492,16 @@ namespace CriWare
 			this.startTimeMs = Math.Max(0L, startTimeMs);
 		}
 
+		public void SetPitch(float pitch)
+		{
+			// Pitch will be applied when Start() is called via CriAtomAudioRuntime
+			// Store for later use or apply to existing playback
+			if (currentPlayback.id != 0)
+			{
+				CriAtomAudioRuntime.SetPitch(currentPlayback.id, pitch);
+			}
+		}
+
 		public CriAtomExPlayback Start()
 		{
 			if (acb == null || string.IsNullOrEmpty(cueName))
@@ -836,6 +846,46 @@ namespace CriWare
 						{
 							source.UnPause();
 						}
+					}
+				}
+			}
+		}
+
+		public static void SetPitch(uint id, float pitch)
+		{
+			if (id == 0 || !playbacks.TryGetValue(id, out PlaybackState state))
+			{
+				return;
+			}
+
+			if (state.Sources != null)
+			{
+				for (int i = 0; i < state.Sources.Length; i++)
+				{
+					AudioSource source = state.Sources[i];
+					if (source != null)
+					{
+						source.pitch = Mathf.Max(0.1f, pitch);
+					}
+				}
+			}
+		}
+
+		public static void SetVolume(uint id, float volume)
+		{
+			if (id == 0 || !playbacks.TryGetValue(id, out PlaybackState state))
+			{
+				return;
+			}
+
+			if (state.Sources != null)
+			{
+				for (int i = 0; i < state.Sources.Length; i++)
+				{
+					AudioSource source = state.Sources[i];
+					if (source != null)
+					{
+						source.volume = Mathf.Max(0f, volume);
 					}
 				}
 			}

@@ -248,4 +248,107 @@ public class ShareExportHelper {
         shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivity(Intent.createChooser(shareIntent, "分享谱面"));
     }
+
+    /**
+     * SubTask 8.5: 安卓端：保存视频到相册
+     * 使用MediaStore API保存到指定相册目录
+     *
+     * @param sourcePath 源视频文件路径（Unity的临时文件路径）
+     * @param filename   文件名（包含.mp4扩展名）
+     * @param albumName  相册名称（如"OpenSekai_Rec"）
+     */
+    public static void saveVideoToGallery(String sourcePath, String filename, String albumName) {
+        Activity activity = UnityPlayer.currentActivity;
+        if (activity == null) {
+            android.util.Log.e("ShareExportHelper", "Activity is null, cannot save video");
+            return;
+        }
+
+        File sourceFile = new File(sourcePath);
+        if (!sourceFile.exists()) {
+            android.util.Log.e("ShareExportHelper", "Source file does not exist: " + sourcePath);
+            return;
+        }
+
+        ContentResolver resolver = activity.getContentResolver();
+
+        try {
+            // SubTask 8.4: 使用MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            Uri videoCollection;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // Android 10+ (API 29+): 使用RELATIVE_PATH
+                videoCollection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
+            } else {
+                // Android 9及以下：使用EXTERNAL_CONTENT_URI
+                videoCollection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+            }
+
+            // 创建ContentValues设置视频元数据
+            ContentValues videoValues = new ContentValues();
+
+            // 设置文件名
+            videoValues.put(MediaStore.Video.Media.DISPLAY_NAME, filename);
+
+            // 设置MIME类型为视频MP4
+            videoValues.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+
+            // Android 10+ (API 29+): 设置相对路径到Movies或DCIM目录
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                // 优先使用Movies目录，更符合视频存储规范
+                String relativePath = "Movies/" + albumName;
+                videoValues.put(MediaStore.Video.Media.RELATIVE_PATH, relativePath);
+
+                // 设置IS_PENDING标记，表示文件正在写入
+                videoValues.put(MediaStore.Video.Media.IS_PENDING, 1);
+            }
+
+            // 使用ContentResolver.insert插入记录，获取视频URI
+            Uri videoUri = resolver.insert(videoCollection, videoValues);
+
+            if (videoUri == null) {
+                android.util.Log.e("ShareExportHelper", "Failed to create video entry in MediaStore");
+                return;
+            }
+
+            android.util.Log.d("ShareExportHelper", "Video URI created: " + videoUri.toString());
+
+            // 使用ContentResolver.openOutputStream写入文件数据
+            OutputStream outputStream = resolver.openOutputStream(videoUri);
+            if (outputStream == null) {
+                android.util.Log.e("ShareExportHelper", "Failed to open output stream for video URI");
+                resolver.delete(videoUri, null, null);
+                return;
+            }
+
+            // 从源文件读取数据并写入到MediaStore
+            FileInputStream inputStream = new FileInputStream(sourceFile);
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            long totalBytes = 0;
+
+            while ((bytesRead = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, bytesRead);
+                totalBytes += bytesRead;
+            }
+
+            inputStream.close();
+            outputStream.flush();
+            outputStream.close();
+
+            android.util.Log.d("ShareExportHelper", "Video saved successfully: " + totalBytes + " bytes");
+
+            // Android 10+: 清除IS_PENDING标记，表示文件已完成
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                ContentValues updateValues = new ContentValues();
+                updateValues.put(MediaStore.Video.Media.IS_PENDING, 0);
+                resolver.update(videoUri, updateValues, null, null);
+            }
+
+            android.util.Log.i("ShareExportHelper", "Video saved to gallery: " + albumName + "/" + filename);
+
+        } catch (Exception e) {
+            android.util.Log.e("ShareExportHelper", "Error saving video to gallery: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 }

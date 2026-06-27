@@ -17,6 +17,12 @@ namespace Sekai.Core.Live
 		private const int MouseFallbackTouchId = -1;
 		private const int MouseFallbackFingerId = 0;
 
+		// Video Generation Mode configuration
+		private bool isVideoGenerationMode;
+		private int videoGenerationSpeedMultiplier = 1;
+		private bool videoGenerationMuteAudio;
+		private bool videoGenerationDisablePause;
+
 		[Serializable]
 		public class InputTmp
 		{
@@ -105,6 +111,12 @@ namespace Sekai.Core.Live
 
 		public bool IsAllPerfectCombo => scoreLogic?.IsAllPerfectCombo ?? false;
 
+		// Video Generation Mode public properties
+		public bool IsVideoGenerationMode => isVideoGenerationMode;
+		public int VideoGenerationSpeedMultiplier => videoGenerationSpeedMultiplier;
+		public bool VideoGenerationMuteAudio => videoGenerationMuteAudio;
+		public bool VideoGenerationDisablePause => videoGenerationDisablePause;
+
 		public LiveLogic(LiveBundleBuildData data)
 		{
 			NativeInput.Enable();
@@ -132,6 +144,9 @@ namespace Sekai.Core.Live
 			seBaseVolume = ApplicationLocalSettings.LoadFromStorage().LiveVolume?.Se ?? 1f;
 			noteDisplayTimeOffset = LiveConfig.GetNoteDisplayOffsetTime(bootData?.LiveSettingData?.NoteSpeed ?? 6f);
 
+			// Detect Video Generation Mode from bootData
+			DetectVideoGenerationMode(bootData);
+
 			musicScore = bootData?.MusicData?.MusicScore ?? new MusicScore();
 			if (bootData?.MusicData != null)
 			{
@@ -152,6 +167,24 @@ namespace Sekai.Core.Live
 			}
 			ResetScoreState();
 			RefreshInput();
+		}
+
+		private void DetectVideoGenerationMode(LiveBootDataBase bootData)
+		{
+			if (bootData is VideoGenerationBootData videoGenData)
+			{
+				isVideoGenerationMode = videoGenData.IsVideoGenerationMode;
+				videoGenerationSpeedMultiplier = videoGenData.VideoGenerationSpeedMultiplier;
+				videoGenerationMuteAudio = videoGenData.VideoGenerationMuteAudio;
+				videoGenerationDisablePause = videoGenData.VideoGenerationDisablePause;
+			}
+			else
+			{
+				isVideoGenerationMode = false;
+				videoGenerationSpeedMultiplier = 1;
+				videoGenerationMuteAudio = false;
+				videoGenerationDisablePause = false;
+			}
 		}
 
 		public void SetSkillLogic(SkillLogic logic)

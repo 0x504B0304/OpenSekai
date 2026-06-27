@@ -1269,6 +1269,27 @@ namespace Sekai
 			currentIngamePlayback.Resume();
 			ResetAudioSyncedUnityTimer();
 		}
+
+		public void SetIngameBgmPitch(float pitch)
+		{
+			if (currentIngamePlayback.id != 0)
+			{
+				CriAtomAudioRuntime.SetPitch(currentIngamePlayback.id, pitch);
+			}
+		}
+
+		public void SetIngameBgmVolume(float volume)
+		{
+			if (currentIngamePlayback.id != 0)
+			{
+				CriAtomAudioRuntime.SetVolume(currentIngamePlayback.id, volume);
+			}
+		}
+
+		public uint GetCurrentIngamePlaybackId()
+		{
+			return currentIngamePlayback.id;
+		}
 	}
 
 	internal sealed class AudioSyncedUnityTimer

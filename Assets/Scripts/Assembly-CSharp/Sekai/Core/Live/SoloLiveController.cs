@@ -1,3 +1,5 @@
+using System.Collections;
+using Sekai.CustomMusicScoreManager;
 using Sekai.Live;
 using Sekai.MusicScoreMaker.Common;
 using Sekai.MusicScoreMaker.Ingame.Presenters;
@@ -14,6 +16,13 @@ namespace Sekai.Core.Live
 		private LiveViewBase[] liveViews;
 		private LiveLogic liveLogic;
 
+		// Video Generation Mode state
+		private bool isVideoGenerationMode;
+		private int videoGenerationSpeedMultiplier = 1;
+		private bool videoGenerationMuteAudio;
+		private bool videoGenerationDisablePause;
+		private float originalBgmVolume;
+
 		protected override void OnAwake()
 		{
 			base.OnAwake();
@@ -23,6 +32,9 @@ namespace Sekai.Core.Live
 				Debug.LogWarning("FreeLiveBootData is null. Test play cannot start.");
 				return;
 			}
+
+			// Detect Video Generation Mode
+			DetectVideoGenerationMode();
 
 			currentMusicTimeMs = System.Math.Max(0L, BootData.MusicData?.StartMusicTimeMs ?? 0L);
 			Setup();
@@ -40,6 +52,34 @@ namespace Sekai.Core.Live
 			LiveTransitioner.SafeFinish(null, null);
 			base.OnMusicStart();
 			LiveViewExt.MusicStart(liveViews, currentAudioLatencyMusicTimeMs);
+
+			// Apply Video Generation Mode settings
+			ApplyVideoGenerationModeSettings();
+
+			// 在游戏实际开始时启动录制，延迟几帧等待相机初始化
+			StartCoroutine(DelayedStartVideoGenerationRecording());
+		}
+
+		private IEnumerator DelayedStartVideoGenerationRecording()
+		{
+			// 等待BaseCamera初始化（最多等待1秒）
+			Camera targetCamera = BaseCamera;
+			int waitFrames = 0;
+			while (targetCamera == null && waitFrames < 60) // 最多等待60帧（约1秒）
+			{
+				yield return null;
+				targetCamera = BaseCamera;
+				waitFrames++;
+			}
+
+			if (targetCamera == null)
+			{
+				Debug.LogError("[SoloLiveController] BaseCamera仍未初始化，无法启动录制。");
+				yield break;
+			}
+
+			Debug.Log($"[SoloLiveController] BaseCamera已就绪: {targetCamera.name}, 等待帧数: {waitFrames}");
+			TryStartVideoGenerationRecording(targetCamera);
 		}
 
 		protected override void OnRhythmGameStart()
@@ -85,6 +125,12 @@ namespace Sekai.Core.Live
 
 		protected override void OnPause()
 		{
+			// Video Generation Mode: Disable pause functionality
+			if (isVideoGenerationMode && videoGenerationDisablePause)
+			{
+				return;
+			}
+
 			if ((state == LiveControllerState.Playing || state == LiveControllerState.ResumeCountDown) && result == 0)
 			{
 				state = LiveControllerState.Pause;
@@ -115,6 +161,12 @@ namespace Sekai.Core.Live
 
 		public void PauseLive()
 		{
+			// Video Generation Mode: Disable pause functionality
+			if (isVideoGenerationMode && videoGenerationDisablePause)
+			{
+				return;
+			}
+
 			if ((state != LiveControllerState.Playing && state != LiveControllerState.ResumeCountDown) || result != 0)
 			{
 				return;
@@ -342,6 +394,15 @@ namespace Sekai.Core.Live
 
 		protected override void OnExit()
 		{
+			// Stop video generation recording if in video generation mode
+			if (isVideoGenerationMode)
+			{
+				TryStopVideoGenerationRecording();
+			}
+
+			// Restore Video Generation Mode settings
+			RestoreVideoGenerationModeSettings();
+
 			LiveViewExt.Finish3D(liveViews);
 			LiveViewExt.OnUnload(liveViews);
 			MenuScreenType? returnScreenType = (BootData as FreeLiveBootData)?.ReturnScreenType;
@@ -358,6 +419,85 @@ namespace Sekai.Core.Live
 			{
 				SceneManager.Instance.RequestScene(SceneManager.Scene.MusicScoreMaker);
 			}
+		}
+
+		private void TryStartVideoGenerationRecording(Camera targetCamera)
+		{
+			// 检查是否已经是视频生成模式且录制已启动
+			if (VideoGenerationController.IsVideoGenerationRecording)
+			{
+				return;
+			}
+
+			// Get boot data from UserDataManager
+			FreeLiveBootData bootData = UserDataManager.Instance.FreeLiveBootData;
+
+			if (bootData == null)
+			{
+				return;
+			}
+
+			// Check if this is a video generation mode boot data
+			if (bootData is VideoGenerationBootData videoGenData && videoGenData.IsVideoGenerationMode)
+			{
+				// Get score title from music data
+				string scoreTitle = bootData.MusicData?.Music?.title ?? $"Score_{bootData.MusicData?.Music?.id}_{bootData.MusicData?.DifficultyString}";
+
+				// Start video generation recording with explicit camera (BaseCamera)
+				// 帧率设置为30fps，平衡画质和录制稳定性
+				bool success = VideoGenerationController.StartVideoGenerationRecording(
+					videoGenData,
+					scoreTitle,
+					1920,
+					1080,
+					30,  // 改为30fps，减少内存占用和帧捕获压力
+					targetCamera  // 传入BaseCamera
+				);
+
+				if (success)
+				{
+					Debug.Log($"[SoloLiveController] Video generation recording started successfully at game start. Title: {scoreTitle}, Camera: {targetCamera?.name ?? "null"}");
+				}
+				else
+				{
+					Debug.LogWarning($"[SoloLiveController] Failed to start video generation recording for: {scoreTitle}");
+				}
+			}
+		}
+
+		private void TryStopVideoGenerationRecording()
+		{
+			if (!VideoGenerationController.IsVideoGenerationRecording)
+			{
+				return;
+			}
+
+			// Stop video generation recording and save the path
+			string recordingPath = VideoGenerationController.StopVideoGenerationRecording();
+
+			if (recordingPath != null)
+			{
+				Debug.Log($"[SoloLiveController] Video generation recording stopped. Path: {recordingPath}");
+
+				// Task 9: 触发视频完成流程（后处理、保存、分享）
+				StartVideoCompletionFlow();
+			}
+			else
+			{
+				Debug.LogWarning("[SoloLiveController] Failed to stop video generation recording.");
+			}
+		}
+
+		/// <summary>
+		/// Task 9: 触发视频完成流程
+		/// 协调视频后处理、保存和分享
+		/// </summary>
+		private void StartVideoCompletionFlow()
+		{
+			Debug.Log("[SoloLiveController] 开始视频完成流程");
+
+			// 使用VideoCompletionHandler协调整个流程
+			VideoCompletionHandler.Instance.StartCompletionFlow();
 		}
 
 		private void SetFinish(float delay, float waitTime, float finishWaitSeconds)
@@ -472,5 +612,76 @@ namespace Sekai.Core.Live
 
 			bootArg.FullComboDataHash = bootArg.MusicScoreDataHashAtTestPlay;
 		}
+
+		#region Video Generation Mode Methods
+
+		private void DetectVideoGenerationMode()
+		{
+			if (BootData is VideoGenerationBootData videoGenData)
+			{
+				isVideoGenerationMode = videoGenData.IsVideoGenerationMode;
+				videoGenerationSpeedMultiplier = videoGenData.VideoGenerationSpeedMultiplier;
+				videoGenerationMuteAudio = videoGenData.VideoGenerationMuteAudio;
+				videoGenerationDisablePause = videoGenData.VideoGenerationDisablePause;
+
+				if (isVideoGenerationMode)
+				{
+					Debug.Log($"[VideoGenerationMode] Enabled with speed={videoGenerationSpeedMultiplier}x, mute={videoGenerationMuteAudio}, disablePause={videoGenerationDisablePause}");
+				}
+			}
+			else
+			{
+				isVideoGenerationMode = false;
+				videoGenerationSpeedMultiplier = 1;
+				videoGenerationMuteAudio = false;
+				videoGenerationDisablePause = false;
+			}
+		}
+
+		private void ApplyVideoGenerationModeSettings()
+		{
+			if (!isVideoGenerationMode)
+			{
+				return;
+			}
+
+			// 新方案：录制完整游戏内容和游戏原声（含谱面音乐）
+			// 1. 不应用倍速，保持正常速度
+			// 2. 不静音BGM，录制完整游戏原声（打击音效 + 谱面音乐）
+			// 3. 后期处理直接使用录制的音频
+
+			// Apply mute BGM settings
+			if (videoGenerationMuteAudio)
+			{
+				originalBgmVolume = 1.0f; // 假设默认BGM音量是1.0
+				SoundManager.Instance.SetIngameBgmVolume(0f);
+				Debug.Log($"[VideoGenerationMode] Applied mute BGM: volume=0, 保留打击音效");
+			}
+			else
+			{
+				Debug.Log($"[VideoGenerationMode] 不静音BGM，录制完整游戏原声（打击音效 + 谱面音乐）");
+			}
+
+			Debug.Log($"[VideoGenerationMode] 正常速度录制模式，录制完整游戏内容");
+		}
+
+		private void RestoreVideoGenerationModeSettings()
+		{
+			if (!isVideoGenerationMode)
+			{
+				return;
+			}
+
+			// Restore BGM volume
+			if (videoGenerationMuteAudio)
+			{
+				SoundManager.Instance.SetIngameBgmVolume(originalBgmVolume);
+				Debug.Log($"[VideoGenerationMode] Restored BGM volume: {originalBgmVolume}");
+			}
+
+			Debug.Log("[VideoGenerationMode] 录制完成，BGM音量已恢复");
+		}
+
+		#endregion
 	}
 }
