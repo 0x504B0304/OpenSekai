@@ -381,6 +381,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				isSelectAllConnectedNotes = GetIsShowSelectAllConnectedNotes(musicScore, hasSelectedNotes, hasSelectedEvents),
 				isSpeedChange = GetIsShowSpeedChange(musicScore, hasSelectedNotes),
 				isDecoration = GetIsShowDecoration(musicScore, hasSelectedNotes),
+				isColor = IsGuideNoteColorButtonVisible(musicScore, hasSelectedNotes),
 				anchoredPosition = anchoredPosition,
 				sizeDelta = sizeDelta,
 				coordinateSpaceTransform = _notesView != null ? _notesView.RectTransform : null,
@@ -473,6 +474,44 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			return noteBaseType == MusicScoreNoteBase.NoteBaseType.Guide ||
 				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideEnd ||
 				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideHiddenConnection;
+		}
+
+		private static bool IsGuideNoteColorButtonVisible(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			HashSet<int> selectedNoteTargetIdSet = musicScore.SelectedNoteTargetIdSet;
+			if (selectedNoteTargetIdSet == null || selectedNoteTargetIdSet.Count == 0)
+			{
+				return false;
+			}
+			Dictionary<int, MusicScoreNoteBase> noteIdCache = musicScore.GetNoteIdCacheOrRebuild();
+			List<MusicScoreNoteBase> connectedNotes = new List<MusicScoreNoteBase>();
+			foreach (int noteId in selectedNoteTargetIdSet)
+			{
+				if (!noteIdCache.TryGetValue(noteId, out MusicScoreNoteBase note) || note == null)
+				{
+					continue;
+				}
+				// 检查第一个音符是否为引导线类型
+				if (!MusicScoreMakerUtility.IsGuideCategory(note.category))
+				{
+					return false;
+				}
+				// 获取该音符所属连接线的所有音符
+				note.FindConnectedNotes(noteIdCache, connectedNotes);
+				// 检查连接线中的所有音符是否都被选中
+				foreach (MusicScoreNoteBase connectedNote in connectedNotes)
+				{
+					if (connectedNote == null || !selectedNoteTargetIdSet.Contains(connectedNote.id))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
 		}
 
 		private void CalculateSelectedObjectsBounds(MusicScoreMakerData musicScore, long startTicks, long endTicks, out Vector2? anchoredPosition, out Vector2? sizeDelta)

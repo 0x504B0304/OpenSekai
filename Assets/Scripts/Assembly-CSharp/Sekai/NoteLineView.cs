@@ -252,7 +252,7 @@ namespace Sekai
 			}
 
 			SetStatusValue(time, baseNote);
-			Color color = baseNote != null && baseNote.State == NoteState.Release ? ReleaseColor : PressColor;
+			Color color = GetNoteColor(baseNote);
 			for (int i = 0; i < meshDataCount - 1 && meshCount < PoolCount; i++)
 			{
 				int vertexIndex = meshCount * TrapezoidVertexCount;
@@ -261,6 +261,45 @@ namespace Sekai
 				UpdateUV(vertexIndex, i);
 				meshCount++;
 			}
+		}
+
+		/// <summary>
+		/// 获取note的实际渲染颜色
+		/// 优先使用自定义颜色（guideColor），否则使用默认类型颜色
+		/// </summary>
+		private Color GetNoteColor(INote baseNote)
+		{
+			// 默认颜色基于状态
+			Color defaultColor = baseNote != null && baseNote.State == NoteState.Release ? ReleaseColor : PressColor;
+
+			// 检查是否为Guide相关类型
+			if (baseNote == null)
+			{
+				return defaultColor;
+			}
+
+			// 检查是否为Guide类型（Guide, GuideEnd, GuideHidden）
+			if (baseNote.Category != NoteCategory.Guide &&
+				baseNote.Category != NoteCategory.GuideEnd &&
+				baseNote.Category != NoteCategory.GuideHidden)
+			{
+				return defaultColor;
+			}
+
+			// 尝试获取自定义颜色
+			if (baseNote is LongNote longNote)
+			{
+				string guideColor = longNote.guideColor;
+				if (!string.IsNullOrEmpty(guideColor))
+				{
+					if (UnityEngine.ColorUtility.TryParseHtmlString(guideColor, out Color customColor))
+					{
+						return customColor;
+					}
+				}
+			}
+
+			return defaultColor;
 		}
 
 		private void UpdateUV(int vertexIndex, int meshDataIndex)

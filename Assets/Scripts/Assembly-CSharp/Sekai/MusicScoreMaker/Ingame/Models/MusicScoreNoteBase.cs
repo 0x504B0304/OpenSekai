@@ -74,6 +74,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		[Key(13)]
 		public bool isDecoration;
 
+		public string guideColor = null;
+
 		[JsonIgnore]
 		[IgnoreMember]
 		[field: NonSerialized]
@@ -110,6 +112,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		{
 			previousConnectionId = -1;
 			nextConnectionId = -1;
+			guideColor = null;
 			ConnectedNotes = new List<MusicScoreNoteBase>();
 		}
 
@@ -273,12 +276,20 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				note = new ConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
 				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote connectionLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					connectionLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.HiddenConnection:
 				note = new HiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
 				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote hiddenConnectionLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					hiddenConnectionLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.LongHoldCombo:
@@ -316,6 +327,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				note = new GuideHiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, bundleBuildData, noteBase.type, noteBase.speedRatio, noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
 				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote guideHiddenLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					guideHiddenLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			default:
@@ -323,6 +338,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			}
 			note.SetSkip(noteBase.isSkip);
 			note.SetDecoration(noteBase.isDecoration);
+			// 设置引导线自定义颜色
+			if (note is LongNote longNoteForColor && !string.IsNullOrEmpty(noteBase.guideColor))
+			{
+				longNoteForColor.SetGuideColor(noteBase.guideColor);
+			}
 			SetParent(longNote, note);
 			return note;
 		}
@@ -492,6 +512,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				direction = direction,
 				isSkip = isSkip,
 				isDecoration = isDecoration,
+				guideColor = guideColor,
 				ConnectedNotes = new List<MusicScoreNoteBase>(ConnectedNotes)
 			};
 		}

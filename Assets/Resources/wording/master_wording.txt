@@ -173,6 +173,8 @@ MSG_CHANGE_DAY,日付が更新されました。\nタイトルに戻ります。
 MSG_CHANGE_HIGH_SPEED_AT_TIMING,指定したタイミングでハイスピードを変更します。
 MSG_CHANGE_RATE_CERTAIN_OR_MORE_BY_POSTS_POSSIBLE,※変更率が{0}%以上で投稿が可能になります。
 MSG_CHANGE_TIME_SIGNATURE_AT_TIMING,指定したタイミングで譜面の拍子を変更します。
+MSG_INPUT_COLOR_HEX,色の16進数コードを入力してください(#を含む)。
+MSG_INVALID_COLOR_VALUE,色の値が不正です。
 MSG_SET_DECORATION_NOTE,このノーツを飾りに設定しますか？
 MSG_CANCEL_DECORATION_NOTE,このノーツの飾り設定を解除しますか？
 MSG_CHAPTER_EPISODE_TITLE,{0} {1}

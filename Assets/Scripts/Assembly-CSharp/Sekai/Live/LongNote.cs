@@ -10,6 +10,18 @@ namespace Sekai.Live
 	{
 		protected int lastInputFrame;
 
+		protected string _guideColor = null;
+
+		public string guideColor
+		{
+			get => _guideColor ?? MusicScoreInfo.guideColor;
+		}
+
+		public void SetGuideColor(string color)
+		{
+			_guideColor = color;
+		}
+
 		public float LaneOffset
 		{
 			[CompilerGenerated]
@@ -182,48 +194,54 @@ namespace Sekai.Live
 		}
 
 		public void AddConnectionNote(NoteBase connectionNote)
+	{
+		if (connectionNote == null)
 		{
-			if (connectionNote == null)
-			{
-				return;
-			}
-
-			NoteList ??= new List<NoteBase> { this };
-			ViewNoteList ??= new List<INote> { this };
-			connectionNote.speedRatio = speedRatio;
-			NoteList.Add(connectionNote);
-			ViewNoteList.Add(connectionNote);
-			connectionNote.SetParentNote(this);
+			return;
 		}
+
+		NoteList ??= new List<NoteBase> { this };
+		ViewNoteList ??= new List<INote> { this };
+		connectionNote.speedRatio = speedRatio;
+		// 继承父note的装饰属性
+		connectionNote.SetDecoration(IsDecoration);
+		NoteList.Add(connectionNote);
+		ViewNoteList.Add(connectionNote);
+		connectionNote.SetParentNote(this);
+	}
 
 		public void AddHoldCombo(LongHoldCombo longHoldCombo)
+	{
+		if (longHoldCombo == null)
 		{
-			if (longHoldCombo == null)
-			{
-				return;
-			}
-
-			NoteList ??= new List<NoteBase> { this };
-			longHoldCombo.speedRatio = speedRatio;
-			NoteList.Add(longHoldCombo);
-			longHoldCombo.SetParentNote(this);
+			return;
 		}
+
+		NoteList ??= new List<NoteBase> { this };
+		longHoldCombo.speedRatio = speedRatio;
+		// 继承父note的装饰属性
+		longHoldCombo.SetDecoration(IsDecoration);
+		NoteList.Add(longHoldCombo);
+		longHoldCombo.SetParentNote(this);
+	}
 
 		public void AddNoteListAndSetupChildNote(NoteBase note)
+	{
+		if (note == null)
 		{
-			if (note == null)
-			{
-				return;
-			}
-
-			note.speedRatio = speedRatio;
-			childNote = note;
-			NoteList ??= new List<NoteBase> { this };
-			ViewNoteList ??= new List<INote> { this };
-			NoteList.Add(note);
-			ViewNoteList.Add(note);
-			SortNoteList();
+			return;
 		}
+
+		note.speedRatio = speedRatio;
+		// 继承父note的装饰属性
+		note.SetDecoration(IsDecoration);
+		childNote = note;
+		NoteList ??= new List<NoteBase> { this };
+		ViewNoteList ??= new List<INote> { this };
+		NoteList.Add(note);
+		ViewNoteList.Add(note);
+		SortNoteList();
+	}
 
 		public override void Excute(MusicScoreInfo currentFrameInfo, float offsetTime)
 		{
@@ -265,26 +283,35 @@ namespace Sekai.Live
 			}
 
 			INote currentNote = this;
-			INote nextNote = childNote;
-			if (ViewNoteList != null)
+		INote nextNote = childNote;
+		if (ViewNoteList != null)
+		{
+			for (var i = 1; i < ViewNoteList.Count - 1; i++)
 			{
-				for (var i = 1; i < ViewNoteList.Count - 1; i++)
+				var viewNote = ViewNoteList[i];
+				if (viewNote == null || viewNote.IsSkip)
 				{
-					var viewNote = ViewNoteList[i];
-					if (viewNote == null || viewNote.IsSkip)
-					{
-						continue;
-					}
-
-					if (viewNote.State != NoteState.Done)
-					{
-						nextNote = viewNote;
-						break;
-					}
-
-					currentNote = viewNote;
+					continue;
 				}
+
+				// 装饰note使用时间判断，普通note使用State判断
+				// 装饰ConnectionNote永远不会被标记为Done，所以需要特殊处理
+				bool isCompleted = viewNote.State == NoteState.Done;
+				if (viewNote is NoteBase noteBase && noteBase.IsDecoration)
+				{
+					// 装饰note：当时间已过判定时间时视为"已完成"
+					isCompleted = currentFrameInfo.time >= viewNote.MusicScoreInfo.time;
+				}
+
+				if (!isCompleted)
+				{
+					nextNote = viewNote;
+					break;
+				}
+
+				currentNote = viewNote;
 			}
+		}
 
 			LiveUtility.CalcExcuteNoteLane(this, ref currentNote, ref nextNote, ref currentFrameInfo, MusicScoreInfo, childNote);
 

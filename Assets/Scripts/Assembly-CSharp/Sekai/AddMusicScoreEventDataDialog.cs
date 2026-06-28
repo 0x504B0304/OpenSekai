@@ -190,6 +190,31 @@ namespace Sekai
 			_inputField.gameObject.SetActive(true);
 		}
 
+		public void SetupColorInput(string initialColor)
+		{
+			if (_inputField == null)
+			{
+				return;
+			}
+
+			_inputField.onValueChanged.RemoveAllListeners();
+			_inputField.onEndEdit.RemoveAllListeners();
+			_inputField.onSubmit.RemoveAllListeners();
+
+			SetMessageWording("MSG_INPUT_COLOR_HEX");
+			_inputField.SetTextWithoutNotify(initialColor ?? "#ffffff");
+			_inputField.contentType = TMP_InputField.ContentType.Standard;
+			_inputField.lineType = TMP_InputField.LineType.SingleLine;
+			_inputField.inputType = TMP_InputField.InputType.Standard;
+			_inputField.keyboardType = TouchScreenKeyboardType.Default;
+			_inputField.characterLimit = 0;
+
+			SetActive(_slashText, false);
+			SetActive(_dropdown, false);
+
+			_inputField.gameObject.SetActive(true);
+		}
+
 		private static string FormatHighSpeedForInput(float value)
 		{
 			return value.ToString("0.00", CultureInfo.InvariantCulture);

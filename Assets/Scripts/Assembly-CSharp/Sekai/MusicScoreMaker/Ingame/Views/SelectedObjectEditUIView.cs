@@ -37,6 +37,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private DispatcherEventBaseButton _decorationButton;
 
 		[SerializeField]
+		private DispatcherEventBaseButton _colorButton;
+
+		[SerializeField]
 		private ToolInputHandler _expandLeftInputHandler;
 
 		[SerializeField]
@@ -108,6 +111,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			SetupSpeedChangeButton();
 			SetupDecorationButton();
+			SetupColorButton();
 		}
 
 		private void OnDestroy()
@@ -126,6 +130,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 			CleanupSpeedChangeButton();
 			CleanupDecorationButton();
+			CleanupColorButton();
 			RemoveEventDispatcher();
 		}
 
@@ -185,6 +190,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_selectAllConnectedNotesButton.SetActive(eventData.isSelectAllConnectedNotes);
 			_speedChangeButton.SetActive(eventData.isSpeedChange);
 			_decorationButton.SetActive(eventData.isDecoration);
+			_colorButton.SetActive(eventData.isColor);
 			_expandLeftInputHandler.SetActive(eventData.isLeftExpand);
 			_expandRightInputHandler.SetActive(eventData.isRightExpand);
 			gameObject.SetActive(eventData.isShow);
@@ -362,6 +368,24 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			return _sIsExpandInputDragging;
 		}
 
+		public static bool IsValidHexColor(string colorString)
+		{
+			// 检查字符串是否以#开头
+			if (string.IsNullOrEmpty(colorString) || !colorString.StartsWith("#"))
+			{
+				return false;
+			}
+
+			// 检查长度是否为7或9（#RRGGBB或#RRGGBBAA）
+			if (colorString.Length != 7 && colorString.Length != 9)
+			{
+				return false;
+			}
+
+			// 使用UnityEngine.ColorUtility.TryParseHtmlString验证
+			return UnityEngine.ColorUtility.TryParseHtmlString(colorString, out _);
+		}
+
 		private void SetupSpeedChangeButton()
 		{
 			if (_speedChangeButton != null)
@@ -503,6 +527,96 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
 				allowCloseExternal: true);
+		}
+
+		private void SetupColorButton()
+		{
+			if (_colorButton != null)
+			{
+				CustomButton button = _colorButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnColorButtonClick);
+				}
+			}
+		}
+
+		private void CleanupColorButton()
+		{
+			if (_colorButton != null)
+			{
+				CustomButton button = _colorButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnColorButtonClick);
+				}
+			}
+		}
+
+		private void OnColorButtonClick()
+		{
+			MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+			if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
+			{
+				return;
+			}
+
+			// 获取第一个选中音符的 guideColor 值
+			MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+			string currentColor = firstNote?.guideColor ?? "#ffffff";
+
+			AddMusicScoreEventDataDialog dialog = null;
+			dialog = ScreenManager.Instance?.Show2ButtonDialog<AddMusicScoreEventDataDialog>(
+				DialogType.AddMusicScoreEventDataDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() =>
+				{
+					// 确认按钮回调：校验颜色值并应用到所有选中音符
+					if (dialog != null && data != null && data.SelectedNoteIdList != null)
+					{
+						string colorValue = dialog.InputFieldText;
+						if (IsValidHexColor(colorValue))
+						{
+							foreach (int noteId in data.SelectedNoteIdList)
+							{
+								MusicScoreNoteBase note = data.FindNote(noteId);
+								if (note != null)
+								{
+									note.guideColor = colorValue;
+								}
+							}
+							MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+						}
+						else
+						{
+							// 颜色值不合法，显示提示
+							ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+								DialogType.Common1ButtonDialog,
+								"MSG_INVALID_COLOR_VALUE",
+								"WORD_OK",
+								null,
+								DisplayLayerType.Layer_Dialog,
+								DialogSize.Manual,
+								allowCloseExternal: true);
+						}
+					}
+				},
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true);
+
+			if (dialog == null)
+			{
+				return;
+			}
+
+			// 隐藏删除按钮
+			dialog.HideDeleteButton();
+			// 设置颜色输入
+			dialog.SetupColorInput(currentColor);
 		}
 
 		private void AdjustPositionToFitScreen()

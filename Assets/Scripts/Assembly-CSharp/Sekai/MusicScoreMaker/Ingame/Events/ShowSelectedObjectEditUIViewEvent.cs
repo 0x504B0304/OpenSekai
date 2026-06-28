@@ -94,6 +94,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 			set;
 		}
 
+		public bool isColor
+		{
+			[CompilerGenerated]
+			get;
+			[CompilerGenerated]
+			set;
+		}
+
 		public Vector2? anchoredPosition
 		{
 			[CompilerGenerated]

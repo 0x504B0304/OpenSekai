@@ -586,6 +586,32 @@ namespace Sekai.Core.Live
 				longNote.SetStateUnnotice(NoteState.InputBegan);
 			}
 
+			// 头部触发之后，处理中间的LongHoldCombo自动判定
+			if (longNote.NoteList != null && longNote.State == NoteState.InputBegan)
+			{
+				foreach (NoteBase childNote in longNote.NoteList)
+				{
+					// 跳过LongNote自身和尾部，已经处理过
+					if (childNote == longNote || childNote == lastChild)
+					{
+						continue;
+					}
+
+					// 只处理LongHoldCombo
+					if (childNote is LongHoldCombo holdCombo && childNote.State != NoteState.Done)
+					{
+						// 检查该combo点是否到达判定时间
+						if (childNote.MusicScoreInfo.time <= currentFrameInfo.time)
+						{
+							// 自动判定该combo点
+							holdCombo.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+							LiveViewExt.JudgmentNote(liveViews, holdCombo);
+							holdCombo.SetStateUnnotice(NoteState.Done);
+						}
+					}
+				}
+			}
+
 			// At end: play end effect using the last child note's type and remove the long note
 			if (isAtEnd && lastChild != null)
 			{

@@ -190,9 +190,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 			_speedRatioText = textObj.AddComponent<CustomTextMesh>();
 			_speedRatioText.fontSize = 32;
+			_speedRatioText.fontSizeMin = 12; // 最小字体大小
+			_speedRatioText.fontSizeMax = 32; // 最大字体大小
+			_speedRatioText.enableAutoSizing = true; // 启用自动字体大小调整
 			_speedRatioText.color = Color.black;
 			_speedRatioText.text = "";
 			_speedRatioText.alignment = TextAlignmentOptions.Center;
+			_speedRatioText.enableWordWrapping = false; // 禁用自动换行
+			_speedRatioText.overflowMode = TextOverflowModes.Overflow; // 设置溢出模式为溢出显示
 
 			// 加载支持中文的动态字体
 			TMP_FontAsset dynamicFont = Resources.Load<TMP_FontAsset>("font/FOT-RodinNTLGPro-EB SDF_Dynamic");
@@ -330,22 +335,42 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void UpdateNote(MusicScoreNoteBase note)
 		{
-			// 显示速度和装饰文字
+			// 显示速度、装饰和引导线颜色文字
 			if (_speedRatioText != null)
 			{
 				bool isDecoration = note != null && note.isDecoration;
 				bool hasSpeedRatio = note != null && Mathf.Abs(note.speedRatio - 1.0f) > 0.001f;
+				bool hasGuideColor = note != null && !string.IsNullOrEmpty(note.guideColor);
 
-				bool shouldShowText = isDecoration || hasSpeedRatio;
+				bool shouldShowText = isDecoration || hasSpeedRatio || hasGuideColor;
 				_speedRatioText.gameObject.SetActive(shouldShowText);
 
 				if (shouldShowText)
 				{
 					// 组合显示格式
-					if (isDecoration && hasSpeedRatio)
+					string decorationText = isDecoration ? "(装饰)" : "";
+					string speedText = hasSpeedRatio ? $"{note.speedRatio}x" : "";
+					string colorText = hasGuideColor ? $"(颜色:{note.guideColor})" : "";
+
+					if (isDecoration && hasSpeedRatio && hasGuideColor)
 					{
-						// 同时有装饰和单键变速：显示 "<速度>(装饰)"
+						// 同时有装饰、单键变速和颜色：显示 "<速度>x(装饰)(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{speedText}{decorationText}{colorText}";
+					}
+					else if (isDecoration && hasSpeedRatio)
+					{
+						// 只有装饰和单键变速：显示 "<速度>x(装饰)"
 						_speedRatioText.text = $"{note.speedRatio}x(装饰)";
+					}
+					else if (isDecoration && hasGuideColor)
+					{
+						// 只有装饰和颜色：显示 "(装饰)(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{decorationText}{colorText}";
+					}
+					else if (hasSpeedRatio && hasGuideColor)
+					{
+						// 只有单键变速和颜色：显示 "<速度>x(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{speedText}{colorText}";
 					}
 					else if (isDecoration)
 					{
@@ -356,6 +381,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 					{
 						// 只有单键变速：显示 "<速度>x"
 						_speedRatioText.text = $"{note.speedRatio}x";
+					}
+					else if (hasGuideColor)
+					{
+						// 只有颜色：显示 "(颜色:#XXXXXX)"
+						_speedRatioText.text = colorText;
 					}
 					_speedRatioText.color = Color.black;
 				}

@@ -8,11 +8,10 @@ namespace Sekai
 {
     public class OtaChecker : SingletonMonoBehaviour<OtaChecker>
     {
-        private const string OtaUrl = "https://ota.jsoftstudio.top/appver?appid=oj03";
-
         private int localVersionNumber = 45;
         private string localVersionString = "1.6.7";
         private bool hasChecked = false;
+        private bool isDev = false; // 开发模式标志
 
         protected override void OnInitialize()
         {
@@ -33,8 +32,10 @@ namespace Sekai
                     {
                         localVersionNumber = versionData.vernumber;
                         localVersionString = versionData.version;
+                        isDev = versionData.isDev;
                         Debug.Log($"[OtaChecker] Local version number: {localVersionNumber}");
                         Debug.Log($"[OtaChecker] Local version string: {localVersionString}");
+                        Debug.Log($"[OtaChecker] isDev: {isDev}");
                     }
                 }
                 else
@@ -48,6 +49,38 @@ namespace Sekai
             }
         }
 
+        private string GetAppId()
+        {
+            // 开发模式优先使用开发appid
+            if (isDev)
+            {
+                Debug.Log("[OtaChecker] Using dev appid: ojskdev");
+                return "ojskdev";
+            }
+
+            // 根据平台选择appid
+            #if UNITY_STANDALONE_WIN
+                Debug.Log("[OtaChecker] Platform: Windows, using appid: oj04");
+                return "oj04";
+            #elif UNITY_ANDROID
+                Debug.Log("[OtaChecker] Platform: Android, using appid: oj05");
+                return "oj05";
+            #else
+                Debug.Log("[OtaChecker] Platform: Unsupported, skipping OTA check");
+                return null; // 跳过检查
+            #endif
+        }
+
+        private string GetOtaUrl()
+        {
+            string appId = GetAppId();
+            if (appId == null)
+            {
+                return null;
+            }
+            return $"https://ota.jsoftstudio.top/appver?appid={appId}";
+        }
+
         public void CheckForUpdates()
         {
             if (hasChecked)
@@ -55,17 +88,34 @@ namespace Sekai
                 Debug.Log("[OtaChecker] Already checked, skipping");
                 return;
             }
+
+            // 检查是否需要跳过
+            string appId = GetAppId();
+            if (appId == null)
+            {
+                Debug.Log("[OtaChecker] Skipping OTA check for unsupported platform");
+                hasChecked = true;
+                return;
+            }
+
             hasChecked = true;
-            Debug.Log("[OtaChecker] CheckForUpdates started");
+            Debug.Log("[OtaChecker] CheckForUpdates started with appid: " + appId);
             CheckForUpdatesAsync().Forget();
         }
 
         private async UniTaskVoid CheckForUpdatesAsync()
         {
-            Debug.Log("[OtaChecker] CheckForUpdatesAsync started");
+            string otaUrl = GetOtaUrl();
+            if (otaUrl == null)
+            {
+                Debug.Log("[OtaChecker] No OTA URL, skipping check");
+                return;
+            }
+
+            Debug.Log("[OtaChecker] CheckForUpdatesAsync started, URL: " + otaUrl);
             try
             {
-                using (UnityWebRequest request = UnityWebRequest.Get(OtaUrl))
+                using (UnityWebRequest request = UnityWebRequest.Get(otaUrl))
                 {
                     request.timeout = 10;
 
@@ -219,6 +269,7 @@ namespace Sekai
         {
             public int vernumber;
             public string version;
+            public bool isDev; // 新增字段
         }
 
         [Serializable]
