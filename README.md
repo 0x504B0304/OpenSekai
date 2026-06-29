@@ -10,12 +10,20 @@
 
 <img src="https://img.shields.io/badge/交流QQ群-984242265-purple">
 
+<img src="https://img.shields.io/badge/OpenSekai官方群-787994708-purple">
+
 <img src="https://img.shields.io/badge/B站-J软件官方-light">
 
 <img src="https://img.shields.io/badge/官网-www.jsoftstudio.top-yellow">
 
 ------
 
+
+> [!CAUTION]
+> 此仓库已进行归档并被放弃维护，未来大概率不会继续更新
+
+> [!tip]
+> 欢迎clone本仓库，基于功能丰富的社区版继续开发
 
 Ojsk Community 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩法复刻项目，目前提供可用的**谱面编辑器**、**第三方歌曲包支持**，以及**从编辑器进入 live 测试游玩**的完整流程。
 
