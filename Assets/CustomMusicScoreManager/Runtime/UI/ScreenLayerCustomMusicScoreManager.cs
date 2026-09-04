@@ -284,11 +284,11 @@ namespace Sekai.CustomMusicScoreManager
 			bestResultContentGroup.childForceExpandWidth = true;
 			bestResultContentGroup.childForceExpandHeight = true;
 			_bestResultLeftText = CreateText("LeftText", bestResultContent, string.Empty, 18, FontStyles.Normal, TextAlignmentOptions.Left);
-			_bestResultLeftText.enableWordWrapping = false;
+			_bestResultLeftText.textWrappingMode = TextWrappingModes.NoWrap;
 			_bestResultLeftText.overflowMode = TextOverflowModes.Overflow;
 			_bestResultLeftText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 			_bestResultRightText = CreateText("RightText", bestResultContent, string.Empty, 18, FontStyles.Normal, TextAlignmentOptions.Left);
-			_bestResultRightText.enableWordWrapping = false;
+			_bestResultRightText.textWrappingMode = TextWrappingModes.NoWrap;
 			_bestResultRightText.overflowMode = TextOverflowModes.Overflow;
 			_bestResultRightText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
 			_bestResultPanel.gameObject.SetActive(false);
@@ -2198,7 +2198,7 @@ namespace Sekai.CustomMusicScoreManager
 				actionButton.onClick.AddListener(onClick);
 
 				TextMeshProUGUI actionLabel = CreateText("Label", actionRect, "导入", 20, FontStyles.Bold, TextAlignmentOptions.Center);
-				actionLabel.enableWordWrapping = false;
+				actionLabel.textWrappingMode = TextWrappingModes.NoWrap;
 				actionLabel.overflowMode = TextOverflowModes.Ellipsis;
 				Stretch(actionLabel.rectTransform);
 			}
@@ -2238,7 +2238,7 @@ namespace Sekai.CustomMusicScoreManager
 			button.onClick.AddListener(onClick);
 
 			TextMeshProUGUI text = CreateText("Label", buttonRect, label, 20, FontStyles.Bold, TextAlignmentOptions.Center);
-			text.enableWordWrapping = false;
+			text.textWrappingMode = TextWrappingModes.NoWrap;
 			text.overflowMode = TextOverflowModes.Ellipsis;
 			Stretch(text.rectTransform);
 			return button;
@@ -2268,7 +2268,7 @@ namespace Sekai.CustomMusicScoreManager
 			button.onClick.AddListener(onClick);
 
 			TextMeshProUGUI text = CreateText("Label", rect, label, 20, FontStyles.Bold, TextAlignmentOptions.Center);
-			text.enableWordWrapping = false;
+			text.textWrappingMode = TextWrappingModes.NoWrap;
 			text.overflowMode = TextOverflowModes.Ellipsis;
 			Stretch(text.rectTransform);
 			return button;
@@ -2398,7 +2398,7 @@ namespace Sekai.CustomMusicScoreManager
 			tmp.fontStyle = style;
 			tmp.alignment = alignment;
 			tmp.color = new Color32(238, 243, 247, 255);
-			tmp.enableWordWrapping = false;
+			tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			tmp.overflowMode = TextOverflowModes.Ellipsis;
 			return tmp;
 		}

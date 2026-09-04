@@ -1,6 +1,5 @@
 using System;
 using UnityEngine;
-using UnityEngine.Experimental.Rendering.Universal;
 using UnityEngine.Rendering.Universal;
 
 namespace Sekai.Rendering
@@ -29,8 +28,5 @@ namespace Sekai.Rendering
 		{
 		}
 
-		public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
-		{
-		}
 	}
 }

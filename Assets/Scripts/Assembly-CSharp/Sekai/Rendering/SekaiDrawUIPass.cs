@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 
 namespace Sekai.Rendering
@@ -14,9 +15,14 @@ namespace Sekai.Rendering
 		private ShaderTagId m_ShaderTagId = new ShaderTagId(SekaiShaderTag.GetTag(SekaiShaderTagType.Default));
 		private FilteringSettings m_FilteringSettings = new FilteringSettings(RenderQueueRange.transparent, ~0);
 		private RenderStateBlock m_RenderStateBlock = new RenderStateBlock(RenderStateMask.Nothing);
-		private RTHandle m_ColorTargetHandle;
-		private RTHandle m_DepthTargetHandle;
 		private bool m_IsCameraRenderTarget;
+
+		private sealed class PassData
+		{
+			public RendererListHandle RendererList;
+			public Vector4 ScaleBiasRt;
+			public Vector4 ScreenParams;
+		}
 
 		public SekaiDrawUIPass(string profilerTag)
 		{
@@ -28,15 +34,11 @@ namespace Sekai.Rendering
 			LayerMask layerMask,
 			StencilState stencilState,
 			int stencilReference,
-			RTHandle colorTargetHandle,
-			RTHandle depthTargetHandle,
 			bool isCameraRenderTarget,
 			RenderQueueRange renderQueueRange)
 		{
 			m_ShaderTagId = new ShaderTagId(SekaiShaderTag.GetTag(SekaiShaderTagType.Default));
 			m_FilteringSettings = new FilteringSettings(renderQueueRange, layerMask);
-			m_ColorTargetHandle = colorTargetHandle;
-			m_DepthTargetHandle = depthTargetHandle;
 			m_IsCameraRenderTarget = isCameraRenderTarget;
 			m_RenderStateBlock = new RenderStateBlock(RenderStateMask.Nothing);
 			if (stencilState.enabled)
@@ -47,60 +49,89 @@ namespace Sekai.Rendering
 			}
 		}
 
-		public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
+		public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
 		{
-			base.OnCameraSetup(cmd, ref renderingData);
-			ConfigureColorStoreAction(RenderBufferStoreAction.Store);
-			ConfigureDepthStoreAction(RenderBufferStoreAction.DontCare);
-		}
-
-		public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
-		{
-			base.Configure(cmd, cameraTextureDescriptor);
-			if (m_ColorTargetHandle != null && m_DepthTargetHandle != null)
-			{
-				ConfigureTarget(m_ColorTargetHandle, m_DepthTargetHandle);
-			}
-
-			ConfigureClear(ClearFlag.Depth, Color.black);
-		}
-
-		public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-		{
-			if (m_ColorTargetHandle == null)
+			var resourceData = frameData.Get<UniversalResourceData>();
+			var renderingData = frameData.Get<UniversalRenderingData>();
+			var cameraData = frameData.Get<UniversalCameraData>();
+			var lightData = frameData.Get<UniversalLightData>();
+			var colorTarget = m_IsCameraRenderTarget
+				? resourceData.activeColorTexture
+				: ImportTexture(renderGraph, SekaiUIBuffer.CaptureColorTexHandle);
+			var depthTarget = m_IsCameraRenderTarget
+				? resourceData.activeDepthTexture
+				: ImportTexture(renderGraph, SekaiUIBuffer.CaptureDepthTexHandle);
+			if (!colorTarget.IsValid() || !depthTarget.IsValid())
 			{
 				return;
 			}
 
-			var cmd = CommandBufferPool.Get();
-			using (new ProfilingScope(cmd, m_ProfilingSampler))
+			var drawingSettings = RenderingUtils.CreateDrawingSettings(
+				m_ShaderTagId,
+				renderingData,
+				cameraData,
+				lightData,
+				(SortingCriteria)23);
+			var rendererListParams = new RendererListParams(renderingData.cullResults, drawingSettings, m_FilteringSettings);
+			var rendererList = renderGraph.CreateRendererList(rendererListParams);
+			if (!rendererList.IsValid())
 			{
-				cmd.SetGlobalVector(s_DrawObjectPassDataPropID, Vector4.zero);
-				cmd.SetGlobalVector(s_ScaleBiasRtPropID, GetScaleBiasRt(ref renderingData));
-				cmd.SetGlobalVector(s_ScreenParamsPropID, GetScreenParams(ref renderingData));
+				return;
 			}
 
-			context.ExecuteCommandBuffer(cmd);
-			cmd.Clear();
-
-			var drawingSettings = CreateDrawingSettings(m_ShaderTagId, ref renderingData, (SortingCriteria)23);
-			var filteringSettings = m_FilteringSettings;
-			context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref filteringSettings, ref m_RenderStateBlock);
-			CommandBufferPool.Release(cmd);
+			using (var builder = renderGraph.AddRasterRenderPass<PassData>(passName, out var passData, m_ProfilingSampler))
+			{
+				passData.RendererList = rendererList;
+				passData.ScaleBiasRt = GetScaleBiasRt(cameraData);
+				passData.ScreenParams = GetScreenParams(cameraData);
+				builder.UseRendererList(rendererList);
+				builder.UseAllGlobalTextures(true);
+				builder.SetRenderAttachment(colorTarget, 0, AccessFlags.Write);
+				builder.SetRenderAttachmentDepth(depthTarget, AccessFlags.Write);
+				builder.AllowGlobalStateModification(true);
+				builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
+				{
+					context.cmd.ClearRenderTarget(RTClearFlags.Depth, Color.black, 1f, 0);
+					context.cmd.SetGlobalVector(s_DrawObjectPassDataPropID, Vector4.zero);
+					context.cmd.SetGlobalVector(s_ScaleBiasRtPropID, data.ScaleBiasRt);
+					context.cmd.SetGlobalVector(s_ScreenParamsPropID, data.ScreenParams);
+					context.cmd.DrawRendererList(data.RendererList);
+				});
+			}
 		}
 
-		private Vector4 GetScaleBiasRt(ref RenderingData renderingData)
+		private static TextureHandle ImportTexture(RenderGraph renderGraph, RTHandle handle)
 		{
-			var yFlip = renderingData.cameraData.IsCameraProjectionMatrixFlipped();
+			return handle != null ? renderGraph.ImportTexture(handle) : TextureHandle.nullHandle;
+		}
+
+		private Vector4 GetScaleBiasRt(UniversalCameraData cameraData)
+		{
+			var target = m_IsCameraRenderTarget ? null : SekaiUIBuffer.CaptureColorTexHandle;
+			var yFlip = target != null
+				? cameraData.IsRenderTargetProjectionMatrixFlipped(target)
+				: IsCameraTargetProjectionMatrixFlipped(cameraData);
 			var flipSign = yFlip ? -1f : 1f;
 			return flipSign < 0f
 				? new Vector4(flipSign, 1f, -1f, 1f)
 				: new Vector4(flipSign, 0f, 1f, 1f);
 		}
 
-		private Vector4 GetScreenParams(ref RenderingData renderingData)
+		private static bool IsCameraTargetProjectionMatrixFlipped(UniversalCameraData cameraData)
 		{
-			var descriptor = renderingData.cameraData.cameraTargetDescriptor;
+			if (!SystemInfo.graphicsUVStartsAtTop)
+			{
+				return true;
+			}
+
+			return cameraData.targetTexture != null ||
+				cameraData.cameraType == CameraType.SceneView ||
+				cameraData.cameraType == CameraType.Preview;
+		}
+
+		private Vector4 GetScreenParams(UniversalCameraData cameraData)
+		{
+			var descriptor = cameraData.cameraTargetDescriptor;
 			var width = descriptor.width;
 			var height = descriptor.height;
 			if (!m_IsCameraRenderTarget)

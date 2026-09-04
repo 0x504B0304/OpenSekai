@@ -19,16 +19,9 @@ namespace Sekai.Rendering
 		{
 			if (pass != null)
 			{
-				renderer.EnqueuePass(pass);
-			}
-		}
-
-		public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
-		{
-			if (pass != null)
-			{
 				pass.Setup(settings);
 				pass.renderPassEvent = RenderPassEvent.BeforeRendering;
+				renderer.EnqueuePass(pass);
 			}
 		}
 	}

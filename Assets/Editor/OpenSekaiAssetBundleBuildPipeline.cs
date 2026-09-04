@@ -20,11 +20,57 @@ namespace Sekai.EditorTools
 		private const string AssetBundleInfoFileName = "AssetBundleInfo.bytes";
 		private const string StreamingDataRelativePath = "Assets/StreamingAssets/data";
 		private const string TempOutputRelativePath = "Library/OpenSekaiAssetBundles";
+		private const string WindowsBuildDirectoryRelativePath = "Builds/Windows";
+		private const string WindowsExecutableName = "OpenSekai.exe";
 
 		[MenuItem(MenuPath)]
 		public static void BuildForActiveTargetMenu()
 		{
 			BuildForTarget(EditorUserBuildSettings.activeBuildTarget, false);
+		}
+
+		public static void BuildWindowsPlayer()
+		{
+			const BuildTarget target = BuildTarget.StandaloneWindows64;
+			if (EditorUserBuildSettings.activeBuildTarget != target &&
+				!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Standalone, target))
+			{
+				throw new BuildFailedException($"Failed to switch the active build target to {target}.");
+			}
+
+			BuildForTarget(target, true);
+
+			string[] scenes = EditorBuildSettings.scenes
+				.Where(scene => scene.enabled)
+				.Select(scene => scene.path)
+				.ToArray();
+			if (scenes.Length == 0)
+			{
+				throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+			}
+
+			string buildRoot = GetAbsoluteProjectPath("Builds");
+			string outputDirectory = GetAbsoluteProjectPath(WindowsBuildDirectoryRelativePath);
+			RecreateOwnedDirectory(outputDirectory, buildRoot);
+			string outputPath = Path.Combine(outputDirectory, WindowsExecutableName);
+
+			BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+			{
+				scenes = scenes,
+				locationPathName = outputPath,
+				target = target,
+				options = BuildOptions.None
+			});
+
+			if (report.summary.result != BuildResult.Succeeded)
+			{
+				throw new BuildFailedException(
+					$"Windows Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+			}
+
+			Debug.Log(
+				$"OpenSekai Windows Player built. output={outputPath}, " +
+				$"size={report.summary.totalSize}, duration={report.summary.totalTime}");
 		}
 
 		public static bool BuildForTarget(BuildTarget target, bool failWhenNoBundles)

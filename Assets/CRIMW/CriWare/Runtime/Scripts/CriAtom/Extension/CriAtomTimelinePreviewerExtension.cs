@@ -166,7 +166,7 @@ namespace CriWare {
 				.Select(obj => (Component)obj)
 				.ToList();
 
-			int suspectInstanceId = suspect.GetInstanceID();
+			EntityId suspectInstanceId = suspect.GetEntityId();
 			foreach (var component in foundComponents) {
 				var serializeObject = new SerializedObject(component);
 				if (serializeObject == null) {
@@ -180,7 +180,7 @@ namespace CriWare {
 			return foundReferences;
 		}
 
-		private static void FindSerializePropertyRecursive(SerializedProperty iterator, int suspect, Component component) {
+		private static void FindSerializePropertyRecursive(SerializedProperty iterator, EntityId suspect, Component component) {
 			while (iterator.NextVisible(true)) {
 				if (iterator.isArray && iterator.type != "string") {
 					FindSerializePropertyRecursive(iterator, suspect, component);
@@ -194,18 +194,18 @@ namespace CriWare {
 			}
 		}
 
-		private static bool CompareGuid(SerializedProperty property, int suspect) {
+		private static bool CompareGuid(SerializedProperty property, EntityId suspect) {
 			if (property.propertyType != SerializedPropertyType.ObjectReference) {
 				return false;
 			}
 
 			bool checkSubClass = property.objectReferenceValue is GameObject || property.objectReferenceValue is ScriptableObject;
-			if (checkSubClass && property.objectReferenceValue.GetInstanceID() == suspect) {
+			if (checkSubClass && property.objectReferenceValue.GetEntityId() == suspect) {
 				return true;
 			} else if (property.objectReferenceValue is Component) {
-				return (property.objectReferenceValue as Component)?.gameObject.GetInstanceID() == suspect;
+				return (property.objectReferenceValue as Component)?.gameObject.GetEntityId() == suspect;
 			}
-			return property.objectReferenceValue?.GetInstanceID() == suspect;
+			return property.objectReferenceValue?.GetEntityId() == suspect;
 		}
 	}
 

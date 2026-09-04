@@ -41,12 +41,8 @@ namespace Sekai.Rendering
 
 		public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
 		{
-			EnqueuePasses(m_Passes, renderer);
-		}
-
-		public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
-		{
 			SetupRenderPass(m_Settings, m_Passes, renderingData.cameraData.camera);
+			EnqueuePasses(m_Passes, renderer);
 		}
 
 		protected void CreatePasses(in SekaiDrawObjectsSettings settings, out SekaiDrawObjectsPass[] passes)

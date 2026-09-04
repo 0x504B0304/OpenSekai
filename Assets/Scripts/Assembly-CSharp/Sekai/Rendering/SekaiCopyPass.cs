@@ -1,4 +1,6 @@
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule.Util;
 using UnityEngine.Rendering.Universal;
 
 namespace Sekai.Rendering
@@ -6,8 +8,6 @@ namespace Sekai.Rendering
 	public class SekaiCopyPass : ScriptableRenderPass
 	{
 		private readonly ProfilingSampler m_ProfilingSampler;
-		private RTHandle m_Source;
-		private RTHandle m_Dest;
 
 		public SekaiCopyPass(string profilerTag)
 		{
@@ -15,27 +15,27 @@ namespace Sekai.Rendering
 			m_ProfilingSampler = new ProfilingSampler(profilerTag);
 		}
 
-		public void Setup(RTHandle source, RTHandle dest)
+		public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
 		{
-			m_Source = source;
-			m_Dest = dest;
-		}
-
-		public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-		{
-			if (m_Source == null || m_Dest == null)
+			var source = frameData.Get<UniversalResourceData>().activeColorTexture;
+			var destinationHandle = SekaiUIBuffer.CaptureColorTexHandle;
+			if (!source.IsValid() || destinationHandle == null)
 			{
 				return;
 			}
 
-			var cmd = CommandBufferPool.Get();
-			using (new ProfilingScope(cmd, m_ProfilingSampler))
+			var destination = renderGraph.ImportTexture(destinationHandle);
+			if (!destination.IsValid())
 			{
-				Blitter.BlitCameraTexture(cmd, m_Source, m_Dest);
+				return;
 			}
 
-			context.ExecuteCommandBuffer(cmd);
-			CommandBufferPool.Release(cmd);
+			var parameters = new RenderGraphUtils.BlitMaterialParameters(
+				source,
+				destination,
+				Blitter.GetBlitMaterial(TextureDimension.Tex2D),
+				0);
+			renderGraph.AddBlitPass(parameters, m_ProfilingSampler.name);
 		}
 	}
 }

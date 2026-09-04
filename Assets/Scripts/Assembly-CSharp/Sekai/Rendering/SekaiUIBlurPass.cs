@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.RenderGraphModule.Util;
 using UnityEngine.Rendering.Universal;
 
 namespace Sekai.Rendering
@@ -11,8 +13,6 @@ namespace Sekai.Rendering
 
 		private readonly ProfilingSampler m_ProfilingSampler;
 		private readonly Material m_UIEffectMaterial;
-		private RTHandle m_Source;
-		private RTHandle m_Destination;
 
 		public SekaiUIBlurPass(string profilerTag)
 		{
@@ -30,38 +30,34 @@ namespace Sekai.Rendering
 			}
 		}
 
-		public void Setup(RTHandle source, RTHandle dest)
+		public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
 		{
-			m_Source = source;
-			m_Destination = dest;
-		}
-
-		public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
-		{
-			if (m_Source == null || m_Destination == null || SekaiUIBuffer.BlurTempHandle == null || m_UIEffectMaterial == null)
+			var sourceHandle = SekaiUIBuffer.CaptureColorTexHandle;
+			var destinationHandle = SekaiUIBuffer.UIBlurTexHandle;
+			var tempHandle = SekaiUIBuffer.BlurTempHandle;
+			if (sourceHandle == null || destinationHandle == null || tempHandle == null || m_UIEffectMaterial == null)
 			{
 				return;
 			}
 
-			var cmd = CommandBufferPool.Get();
-			using (new ProfilingScope(cmd, m_ProfilingSampler))
+			var source = renderGraph.ImportTexture(sourceHandle);
+			var destination = renderGraph.ImportTexture(destinationHandle);
+			var temp = renderGraph.ImportTexture(tempHandle);
+			if (!source.IsValid() || !destination.IsValid() || !temp.IsValid())
 			{
-				ExecuteBlur(cmd, ref renderingData);
+				return;
 			}
 
-			context.ExecuteCommandBuffer(cmd);
-			CommandBufferPool.Release(cmd);
-		}
-
-		private void ExecuteBlur(CommandBuffer cmd, ref RenderingData renderingData)
-		{
-			cmd.SetGlobalFloat(SamplingDistance, SekaiUIEffectSettings.Blur.BlurSamplingDistance);
-			var descriptor = renderingData.cameraData.cameraTargetDescriptor;
-			cmd.SetGlobalVector(
+			var descriptor = frameData.Get<UniversalCameraData>().cameraTargetDescriptor;
+			m_UIEffectMaterial.SetFloat(SamplingDistance, SekaiUIEffectSettings.Blur.BlurSamplingDistance);
+			m_UIEffectMaterial.SetVector(
 				BlurResolutionParams,
 				new Vector4(1f / descriptor.width, 1f / descriptor.height, 0f, 0f));
-			Blitter.BlitCameraTexture(cmd, m_Source, SekaiUIBuffer.BlurTempHandle, m_UIEffectMaterial, 0);
-			Blitter.BlitCameraTexture(cmd, SekaiUIBuffer.BlurTempHandle, m_Destination, m_UIEffectMaterial, 1);
+
+			var horizontal = new RenderGraphUtils.BlitMaterialParameters(source, temp, m_UIEffectMaterial, 0);
+			renderGraph.AddBlitPass(horizontal, m_ProfilingSampler.name + " Horizontal");
+			var vertical = new RenderGraphUtils.BlitMaterialParameters(temp, destination, m_UIEffectMaterial, 1);
+			renderGraph.AddBlitPass(vertical, m_ProfilingSampler.name + " Vertical");
 		}
 
 		public void Cleanup()

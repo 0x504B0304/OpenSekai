@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 
 namespace Sekai.Rendering
@@ -7,19 +8,16 @@ namespace Sekai.Rendering
 	public class SekaiUIBlurSetupPass : ScriptableRenderPass
 	{
 		private SekaiUIBuffer m_UIBuffer;
-		private RenderTextureDescriptor m_ColorDescriptor;
-		private RenderTextureDescriptor m_DepthDescriptor;
 
-		public void Setup(SekaiUIBuffer uiBuffer, RenderTextureDescriptor colorDescriptor, RenderTextureDescriptor depthDescriptor)
+		public void Setup(SekaiUIBuffer uiBuffer)
 		{
 			m_UIBuffer = uiBuffer;
-			m_ColorDescriptor = colorDescriptor;
-			m_DepthDescriptor = depthDescriptor;
-			m_UIBuffer?.TryGetRTHandle(m_ColorDescriptor, m_DepthDescriptor);
 		}
 
-		public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+		public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
 		{
+			var descriptor = frameData.Get<UniversalCameraData>().cameraTargetDescriptor;
+			m_UIBuffer?.TryGetRTHandle(descriptor, descriptor);
 		}
 
 		public void Dispose()
