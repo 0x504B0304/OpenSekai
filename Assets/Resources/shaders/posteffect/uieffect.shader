@@ -40,7 +40,6 @@ Shader "Hidden/CP/PostEffect/UIEffect"
             float _SamplingDistance;
             float4 _BlurResolutionParams;
             TEXTURE2D_X(_BlitTexture);
-            SAMPLER(sampler_LinearClamp);
 
             Varyings vert(Attributes input)
             {
@@ -90,7 +89,6 @@ Shader "Hidden/CP/PostEffect/UIEffect"
             float _SamplingDistance;
             float4 _BlurResolutionParams;
             TEXTURE2D_X(_BlitTexture);
-            SAMPLER(sampler_LinearClamp);
 
             Varyings vert(Attributes input)
             {

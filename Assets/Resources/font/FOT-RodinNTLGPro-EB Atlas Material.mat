@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: FOT-RodinNTLGPro-EB Atlas Material
-  m_Shader: {fileID: 4800000, guid: 84423b780f0893448b6af0d24f0db577, type: 3}
+  m_Shader: {fileID: 4800000, guid: 5c806345d31afeb4e8a4ef96566b019d, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []

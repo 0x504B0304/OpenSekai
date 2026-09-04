@@ -1,678 +1,182 @@
-Shader "Area/Post" {
-	Properties {
-	}
-	SubShader {
-		Tags { "RenderType" = "Opaque" }
-		// Extracted GLSL subprograms. Variant and pass grouping is approximate.
-		Pass {
-			Name "GLSL_0"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
+Shader "Area/Post"
+{
+    SubShader
+    {
+        Tags
+        {
+            "RenderType" = "Opaque"
+            "RenderPipeline" = "UniversalPipeline"
+        }
 
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
+        ZTest Always
+        ZWrite Off
+        Cull Off
 
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
+        HLSLINCLUDE
+        #pragma target 3.5
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
+        struct Attributes
+        {
+            uint vertexID : SV_VertexID;
+        };
 
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec2 _GlobalMipBias;
-			uniform 	mediump vec4 _FilterParams;
-			uniform 	float _BrightnessIntensity;
-			UNITY_LOCATION(0) uniform mediump sampler2D _BlitTexture;
-			in highp vec2 vs_TEXCOORD0;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			mediump vec3 u_xlat16_0;
-			mediump vec2 u_xlat16_1;
-			float u_xlat6;
-			void main()
-			{
-			    u_xlat16_0.xyz = texture(_BlitTexture, vs_TEXCOORD0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_1.x = dot(vec3(0.212599993, 0.715200007, 0.0722000003), u_xlat16_0.xyz);
-			    u_xlat6 = log2(u_xlat16_1.x);
-			    u_xlat6 = u_xlat6 * _BrightnessIntensity;
-			    u_xlat6 = exp2(u_xlat6);
-			    u_xlat16_1.xy = vec2(u_xlat6) + (-_FilterParams.yx);
-			    u_xlat16_1.x = max(u_xlat16_1.x, 0.0);
-			    u_xlat16_1.x = min(u_xlat16_1.x, _FilterParams.z);
-			    u_xlat16_1.x = u_xlat16_1.x * u_xlat16_1.x;
-			    u_xlat16_1.x = u_xlat16_1.x * _FilterParams.w;
-			    u_xlat16_1.x = max(u_xlat16_1.y, u_xlat16_1.x);
-			    SV_Target0.xyz = u_xlat16_0.xyz * u_xlat16_1.xxx;
-			    SV_Target0.w = u_xlat16_1.x;
-			    return;
-			}
+        struct Varyings
+        {
+            float4 positionCS : SV_POSITION;
+            float2 texcoord : TEXCOORD0;
+            float2 vignetteCoord : TEXCOORD1;
+        };
 
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_1"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
+        TEXTURE2D_X(_BlitTexture);
+        float4 _BlitScaleBias;
+        float4 _BlitTexture_TexelSize;
+        half4 _FilterParams;
+        float _BrightnessIntensity;
+        float _DownSamplingDelta;
+        half4 _BloomColor;
+        float _Intensity;
+        float _VignettePower;
+        half4 _VignetteColor;
+        float _VignetteTop;
+        float _VignetteBottom;
 
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
+        Varyings Vert(Attributes input)
+        {
+            Varyings output;
+            output.positionCS = GetFullScreenTriangleVertexPosition(input.vertexID);
+            float2 fullscreenUv = GetFullScreenTriangleTexCoord(input.vertexID);
+            output.texcoord = fullscreenUv * _BlitScaleBias.xy + _BlitScaleBias.zw;
+            float2 clipPosition = fullscreenUv * 2.0 - 1.0;
+            output.vignetteCoord = float2(clipPosition.x * _BlitTexture_TexelSize.y * _BlitTexture_TexelSize.z, clipPosition.y);
+            return output;
+        }
 
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
+        half3 SampleBlit(float2 uv)
+        {
+            return SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv).rgb;
+        }
 
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
+        half3 SampleFour(float2 uv, float2 offset)
+        {
+            half3 color = SampleBlit(uv + float2(-offset.x, -offset.y));
+            color += SampleBlit(uv + float2(offset.x, -offset.y));
+            color += SampleBlit(uv + float2(-offset.x, offset.y));
+            color += SampleBlit(uv + float2(offset.x, offset.y));
+            return color * 0.25h;
+        }
 
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec2 _GlobalMipBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			uniform 	float _DownSamplingDelta;
-			uniform 	mediump vec4 _BloomColor;
-			UNITY_LOCATION(0) uniform mediump sampler2D _BlitTexture;
-			in highp vec2 vs_TEXCOORD0;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec4 u_xlat0;
-			mediump vec3 u_xlat16_0;
-			vec4 u_xlat1;
-			mediump vec3 u_xlat16_1;
-			mediump vec3 u_xlat16_2;
-			mediump vec3 u_xlat16_3;
-			void main()
-			{
-			    u_xlat0 = vec4(vec4(_DownSamplingDelta, _DownSamplingDelta, _DownSamplingDelta, _DownSamplingDelta)) * vec4(-1.0, -1.0, 1.0, 1.0);
-			    u_xlat1 = _BlitTexture_TexelSize.xyxy * u_xlat0.xyzy + vs_TEXCOORD0.xyxy;
-			    u_xlat0 = _BlitTexture_TexelSize.xyxy * u_xlat0.xwzw + vs_TEXCOORD0.xyxy;
-			    u_xlat16_2.xyz = texture(_BlitTexture, u_xlat1.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat1.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_3.xyz = u_xlat16_1.xyz + u_xlat16_2.xyz;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_0.xyz = texture(_BlitTexture, u_xlat0.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_3.xyz = u_xlat16_1.xyz + u_xlat16_3.xyz;
-			    u_xlat16_3.xyz = u_xlat16_0.xyz + u_xlat16_3.xyz;
-			    u_xlat16_3.xyz = u_xlat16_3.xyz * _BloomColor.xyz;
-			    SV_Target0.xyz = u_xlat16_3.xyz * vec3(0.25, 0.25, 0.25);
-			    SV_Target0.w = _BloomColor.w;
-			    return;
-			}
+        half4 FragFilter(Varyings input) : SV_Target
+        {
+            half3 source = SampleBlit(input.texcoord);
+            float brightness = pow(max(dot(half3(0.212599993h, 0.715200007h, 0.0722000003h), source), 0.000001), _BrightnessIntensity);
+            half2 threshold = half2(brightness, brightness) - _FilterParams.yx;
+            half soft = min(max(threshold.x, 0.0h), _FilterParams.z);
+            soft = soft * soft * _FilterParams.w;
+            half contribution = max(threshold.y, soft);
+            return half4(source * contribution, contribution);
+        }
 
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_2"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
+        half4 FragBloomDownsample(Varyings input) : SV_Target
+        {
+            float2 offset = _BlitTexture_TexelSize.xy * _DownSamplingDelta;
+            return half4(SampleFour(input.texcoord, offset) * _BloomColor.rgb, _BloomColor.a);
+        }
 
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
+        half4 FragDownsample(Varyings input) : SV_Target
+        {
+            return half4(SampleFour(input.texcoord, _BlitTexture_TexelSize.xy * 0.5), 1.0h);
+        }
 
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
+        half4 FragIntensity(Varyings input) : SV_Target
+        {
+            return half4(SampleBlit(input.texcoord) * _Intensity, 1.0h);
+        }
 
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
+        half4 FragDownsampleIntensity(Varyings input) : SV_Target
+        {
+            half3 color = SampleFour(input.texcoord, _BlitTexture_TexelSize.xy * 0.5);
+            return half4(color * _Intensity, 1.0h);
+        }
 
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec2 _GlobalMipBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			UNITY_LOCATION(0) uniform mediump sampler2D _BlitTexture;
-			in highp vec2 vs_TEXCOORD0;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec4 u_xlat0;
-			mediump vec3 u_xlat16_0;
-			mediump vec3 u_xlat16_1;
-			mediump vec3 u_xlat16_2;
-			void main()
-			{
-			    u_xlat0 = _BlitTexture_TexelSize.xyxy * vec4(-0.5, -0.5, 0.5, -0.5) + vs_TEXCOORD0.xyxy;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_0.xyz = texture(_BlitTexture, u_xlat0.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_2.xyz = u_xlat16_0.xyz + u_xlat16_1.xyz;
-			    u_xlat0 = _BlitTexture_TexelSize.xyxy * vec4(-0.5, 0.5, 0.5, 0.5) + vs_TEXCOORD0.xyxy;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_0.xyz = texture(_BlitTexture, u_xlat0.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_2.xyz = u_xlat16_1.xyz + u_xlat16_2.xyz;
-			    u_xlat16_2.xyz = u_xlat16_0.xyz + u_xlat16_2.xyz;
-			    SV_Target0.xyz = u_xlat16_2.xyz * vec3(0.25, 0.25, 0.25);
-			    SV_Target0.w = 1.0;
-			    return;
-			}
+        float GetVignetteFactor(Varyings input)
+        {
+            float vertical = lerp(_VignetteBottom, _VignetteTop, input.texcoord.y);
+            return dot(input.vignetteCoord, input.vignetteCoord) * _VignettePower * vertical;
+        }
 
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_3"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
+        half4 FragVignetteMultiply(Varyings input) : SV_Target
+        {
+            return GetVignetteFactor(input) * _VignetteColor;
+        }
 
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
+        half4 FragVignetteScreen(Varyings input) : SV_Target
+        {
+            return lerp(half4(1.0h, 1.0h, 1.0h, 1.0h), _VignetteColor, GetVignetteFactor(input));
+        }
+        ENDHLSL
 
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
+        Pass
+        {
+            Name "Filter"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragFilter
+            ENDHLSL
+        }
 
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
+        Pass
+        {
+            Name "BloomDownsample"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragBloomDownsample
+            ENDHLSL
+        }
 
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec2 _GlobalMipBias;
-			uniform 	float _Intensity;
-			UNITY_LOCATION(0) uniform mediump sampler2D _BlitTexture;
-			in highp vec2 vs_TEXCOORD0;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec3 u_xlat0;
-			mediump vec3 u_xlat16_0;
-			void main()
-			{
-			    u_xlat16_0.xyz = texture(_BlitTexture, vs_TEXCOORD0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat0.xyz = u_xlat16_0.xyz * vec3(_Intensity);
-			    SV_Target0.xyz = u_xlat0.xyz;
-			    SV_Target0.w = 1.0;
-			    return;
-			}
+        Pass
+        {
+            Name "Downsample"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragDownsample
+            ENDHLSL
+        }
 
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_4"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
+        Pass
+        {
+            Name "Intensity"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragIntensity
+            ENDHLSL
+        }
 
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
+        Pass
+        {
+            Name "DownsampleIntensity"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragDownsampleIntensity
+            ENDHLSL
+        }
 
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
+        Pass
+        {
+            Name "VignetteMultiply"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragVignetteMultiply
+            ENDHLSL
+        }
 
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
-
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec2 _GlobalMipBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			uniform 	float _Intensity;
-			UNITY_LOCATION(0) uniform mediump sampler2D _BlitTexture;
-			in highp vec2 vs_TEXCOORD0;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec4 u_xlat0;
-			mediump vec3 u_xlat16_0;
-			mediump vec3 u_xlat16_1;
-			mediump vec3 u_xlat16_2;
-			void main()
-			{
-			    u_xlat0 = _BlitTexture_TexelSize.xyxy * vec4(-0.5, -0.5, 0.5, -0.5) + vs_TEXCOORD0.xyxy;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_0.xyz = texture(_BlitTexture, u_xlat0.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_2.xyz = u_xlat16_0.xyz + u_xlat16_1.xyz;
-			    u_xlat0 = _BlitTexture_TexelSize.xyxy * vec4(-0.5, 0.5, 0.5, 0.5) + vs_TEXCOORD0.xyxy;
-			    u_xlat16_1.xyz = texture(_BlitTexture, u_xlat0.xy, _GlobalMipBias.x).xyz;
-			    u_xlat16_0.xyz = texture(_BlitTexture, u_xlat0.zw, _GlobalMipBias.x).xyz;
-			    u_xlat16_2.xyz = u_xlat16_1.xyz + u_xlat16_2.xyz;
-			    u_xlat16_2.xyz = u_xlat16_0.xyz + u_xlat16_2.xyz;
-			    u_xlat16_2.xyz = u_xlat16_2.xyz * vec3(0.25, 0.25, 0.25);
-			    u_xlat0.xyz = u_xlat16_2.xyz * vec3(_Intensity);
-			    SV_Target0.xyz = u_xlat0.xyz;
-			    SV_Target0.w = 1.0;
-			    return;
-			}
-
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_5"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
-
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
-
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
-
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
-
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	float _VignettePower;
-			uniform 	mediump vec4 _VignetteColor;
-			uniform 	float _VignetteTop;
-			uniform 	float _VignetteBottom;
-			in highp vec2 vs_TEXCOORD0;
-			in highp vec2 vs_TEXCOORD1;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec4 u_xlat0;
-			mediump float u_xlat16_1;
-			float u_xlat2;
-			void main()
-			{
-			    u_xlat0.x = (-_VignetteBottom) + _VignetteTop;
-			    u_xlat0.x = vs_TEXCOORD0.y * u_xlat0.x + _VignetteBottom;
-			    u_xlat16_1 = dot(vs_TEXCOORD1.xy, vs_TEXCOORD1.xy);
-			    u_xlat2 = u_xlat16_1 * _VignettePower;
-			    u_xlat0.x = u_xlat0.x * u_xlat2;
-			    u_xlat0 = u_xlat0.xxxx * _VignetteColor;
-			    SV_Target0 = u_xlat0;
-			    return;
-			}
-
-			#endif
-			ENDGLSL
-		}
-		Pass {
-			Name "GLSL_6"
-			// Platform: Gles3x (index 0), compressed chunk: 0
-			GLSLPROGRAM
-			#ifdef VERTEX
-			#version 300 es
-
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	vec4 _BlitScaleBias;
-			uniform 	vec4 _BlitTexture_TexelSize;
-			out highp vec2 vs_TEXCOORD0;
-			out highp vec2 vs_TEXCOORD1;
-			vec2 u_xlat0;
-			uvec3 u_xlatu0;
-			vec2 u_xlat2;
-			int int_bitfieldInsert(int base, int insert, int offset, int bits) {
-			    uint mask = uint(~(int(~0) << uint(bits)) << uint(offset));
-			    return int((uint(base) & ~mask) | ((uint(insert) << uint(offset)) & mask));
-			}
-
-			void main()
-			{
-			    gl_Position.zw = vec2(-1.0, 1.0);
-			    u_xlatu0.x =  uint(int(int_bitfieldInsert(0, gl_VertexID, 1 & int(0x1F), 1)));
-			    u_xlatu0.z = uint(uint(gl_VertexID) & 2u);
-			    u_xlat0.xy = vec2(u_xlatu0.xz);
-			    u_xlat2.xy = u_xlat0.xy * vec2(2.0, 2.0) + vec2(-1.0, -1.0);
-			    vs_TEXCOORD0.xy = u_xlat0.xy * _BlitScaleBias.xy + _BlitScaleBias.zw;
-			    gl_Position.xy = u_xlat2.xy;
-			    u_xlat0.x = u_xlat2.x * _BlitTexture_TexelSize.y;
-			    vs_TEXCOORD1.y = u_xlat2.y;
-			    vs_TEXCOORD1.x = u_xlat0.x * _BlitTexture_TexelSize.z;
-			    return;
-			}
-
-			#endif
-			#ifdef FRAGMENT
-			#version 300 es
-
-			precision highp float;
-			precision highp int;
-			#define HLSLCC_ENABLE_UNIFORM_BUFFERS 1
-			#if HLSLCC_ENABLE_UNIFORM_BUFFERS
-			#define UNITY_UNIFORM
-			#else
-			#define UNITY_UNIFORM uniform
-			#endif
-			#define UNITY_SUPPORTS_UNIFORM_LOCATION 1
-			#if UNITY_SUPPORTS_UNIFORM_LOCATION
-			#define UNITY_LOCATION(x) layout(location = x)
-			#define UNITY_BINDING(x) layout(binding = x, std140)
-			#else
-			#define UNITY_LOCATION(x)
-			#define UNITY_BINDING(x) layout(std140)
-			#endif
-			uniform 	float _VignettePower;
-			uniform 	mediump vec4 _VignetteColor;
-			uniform 	float _VignetteTop;
-			uniform 	float _VignetteBottom;
-			in highp vec2 vs_TEXCOORD0;
-			in highp vec2 vs_TEXCOORD1;
-			layout(location = 0) out mediump vec4 SV_Target0;
-			vec4 u_xlat0;
-			vec4 u_xlat1;
-			mediump float u_xlat16_1;
-			float u_xlat2;
-			void main()
-			{
-			    u_xlat0.x = (-_VignetteBottom) + _VignetteTop;
-			    u_xlat0.x = vs_TEXCOORD0.y * u_xlat0.x + _VignetteBottom;
-			    u_xlat16_1 = dot(vs_TEXCOORD1.xy, vs_TEXCOORD1.xy);
-			    u_xlat2 = u_xlat16_1 * _VignettePower;
-			    u_xlat0.x = u_xlat0.x * u_xlat2;
-			    u_xlat1 = _VignetteColor + vec4(-1.0, -1.0, -1.0, -1.0);
-			    u_xlat0 = u_xlat0.xxxx * u_xlat1 + vec4(1.0, 1.0, 1.0, 1.0);
-			    SV_Target0 = u_xlat0;
-			    return;
-			}
-
-			#endif
-			ENDGLSL
-		}
-	}
+        Pass
+        {
+            Name "VignetteScreen"
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragVignetteScreen
+            ENDHLSL
+        }
+    }
 }

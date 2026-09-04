@@ -67,13 +67,19 @@ namespace Sekai
 			}
 
 			UnloadOnDemandFontAsset();
+			#if !UNITY_6000_0_OR_NEWER
 			ResetDynamicFontAssets();
+			#endif
 
+			#if !UNITY_6000_0_OR_NEWER
 			ClearPrimaryFontAssetData(_baseFontEB);
+			#endif
 			ClearFallbackFontAsset(_baseFontEB);
 			AddFallbackFontAsset(_baseFontEB, _dynamicFontEB);
 
+			#if !UNITY_6000_0_OR_NEWER
 			ClearPrimaryFontAssetData(_baseFontDB);
+			#endif
 			ClearFallbackFontAsset(_baseFontDB);
 			AddFallbackFontAsset(_baseFontDB, _dynamicFontDB);
 
