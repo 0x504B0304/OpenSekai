@@ -24,10 +24,12 @@ MonoBehaviour:
     bloomPS: {fileID: 4800000, guid: 5d61bfd129f7cad4694541d13bd4ae50, type: 3}
     temporalAntialiasingPS: {fileID: 4800000, guid: 0d56d3107dcac7e4fb7167b69adcc7b1, type: 3}
     LensFlareDataDrivenPS: {fileID: 4800000, guid: 78c0329de31eb904ca95306a89acb261, type: 3}
+    LensFlareScreenSpacePS: {fileID: 0}
     scalingSetupPS: {fileID: 4800000, guid: 2161bbe50fd1e784aab9cc3463b7be9e, type: 3}
     easuPS: {fileID: 4800000, guid: 9ee222f5963ede94d8d2438fa887bb54, type: 3}
     uberPostPS: {fileID: 4800000, guid: bfd66382fb1953741974e98bedf319a9, type: 3}
     finalPostPassPS: {fileID: 4800000, guid: cffa6c98faacfd4478025f7e07985620, type: 3}
+    m_ShaderResourcesVersion: 0
   textures:
     blueNoise16LTex:
     - {fileID: 2800000, guid: a152173b844ae06488750cb69a223389, type: 3}
@@ -62,16 +64,7 @@ MonoBehaviour:
     - {fileID: 2800000, guid: 280669e694c43594aa2b74ff771306cd, type: 3}
     - {fileID: 2800000, guid: 2c8906bcd7b64f44896c623e6eebf4db, type: 3}
     - {fileID: 2800000, guid: 997963f1930196140a1f998fa963eaf0, type: 3}
-    filmGrainTex:
-    - {fileID: 2800000, guid: 84293f77339c00f43afd4699f33dc6a9, type: 3}
-    - {fileID: 2800000, guid: d62eb0acfd6b5e94d8eaf92cb6b8b93a, type: 3}
-    - {fileID: 2800000, guid: b036b79bc698c9548aca1e360622cc16, type: 3}
-    - {fileID: 2800000, guid: 793a62fc3134ab34487e1a6235f9e76b, type: 3}
-    - {fileID: 2800000, guid: 653cf92e28723f347a78e927dfecf142, type: 3}
-    - {fileID: 2800000, guid: 25f8d0e1726b04b4690ad84eee3346a4, type: 3}
-    - {fileID: 2800000, guid: 57dbc8bfaa4be3c49a66ba0ac0f4e868, type: 3}
-    - {fileID: 2800000, guid: 9d6e11fa5040ef549a83bad87880e08e, type: 3}
-    - {fileID: 2800000, guid: ce312f286451dfa4c9fd5f4a5671c83c, type: 3}
-    - {fileID: 2800000, guid: c005c882008c9c64292966983615a8a9, type: 3}
+    filmGrainTex: []
     smaaAreaTex: {fileID: 2800000, guid: 800e8d794efc42c45aca8241611b8e22, type: 3}
     smaaSearchTex: {fileID: 2800000, guid: fc011d33b4d654f44bc782422454b6a8, type: 3}
+    m_TexturesResourcesVersion: 0

@@ -2,6 +2,7 @@
 %TAG !u! tag:unity3d.com,2011:
 --- !u!687078895 &687078895
 SpriteAtlas:
+  serializedVersion: 3
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -41,12 +42,7 @@ SpriteAtlas:
     - 9b2c0cba73d18d049b460fe3062ff6d9: 21300000
     - d623c3482b6fe2d489bc6e816ff58cb3: 21300000
   m_MasterAtlas: {fileID: 0}
-  m_PackedSprites:
-  - {fileID: 21300000, guid: 9b2c0cba73d18d049b460fe3062ff6d9, type: 2}
-  - {fileID: 21300000, guid: d623c3482b6fe2d489bc6e816ff58cb3, type: 2}
-  m_PackedSpriteNamesToIndex:
-  - bar_scoreGauge_mask
-  - icon_create_score_h64_wh
   m_RenderDataMap: {}
   m_Tag: LiveFrontUIAtlas
   m_IsVariant: 0
+  m_Guid: 3c80adfea6d246c4919f81f3d6c92a6e
