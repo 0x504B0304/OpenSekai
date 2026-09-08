@@ -381,10 +381,10 @@ namespace Sekai
 			List<INote> viewNotes = startNote.ParentNote?.ViewNoteList ?? startNote.ViewNoteList;
 			int viewIndex = viewNotes != null ? Mathf.Max(0, viewNotes.IndexOf(startNote)) : 0;
 			int viewLastIndex = Mathf.Max(1, (viewNotes?.Count ?? 2) - 1);
-			float startCenterLane = (startNote.DefaultLeftLane + startNote.DefaultRightLane) * 0.5f;
-			float endCenterLane = (endNote.DefaultLeftLane + endNote.DefaultRightLane) * 0.5f;
-			float startWidth = startNote.DefaultRightLane - startNote.DefaultLeftLane;
-			float endWidth = endNote.DefaultRightLane - endNote.DefaultLeftLane;
+			float startCenterLane = (startNote.DefaultLeftLaneF + startNote.DefaultRightLaneF) * 0.5f;
+			float endCenterLane = (endNote.DefaultLeftLaneF + endNote.DefaultRightLaneF) * 0.5f;
+			float startWidth = startNote.DefaultRightLaneF - startNote.DefaultLeftLaneF;
+			float endWidth = endNote.DefaultRightLaneF - endNote.DefaultLeftLaneF;
 			float startLineProgress = 1f - Mathf.Clamp01((endNote.MusicScoreInfo.time - time) / duration);
 			float endLineProgress = 1f - Mathf.Clamp01((endNote.MusicScoreInfo.time - time - endOffset) / duration);
 

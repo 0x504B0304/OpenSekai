@@ -269,7 +269,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				int laneStart = noteBase.laneStart;
 				int laneEnd = noteBase.laneEnd;
 				MusicScoreMakerUtility.CalcNoteOperation(MusicScoreMakerData, ref ticks, ref laneStart, ref laneEnd, noteBase);
-				UpdateRect(ticks, startTicks, endTicks, laneStart, laneEnd, parentRectContext);
+				UpdateRect(ticks, startTicks, endTicks, laneStart + noteBase.GuideStartOffset, laneEnd + noteBase.GuideEndOffset, parentRectContext);
 			}
 		}
 
@@ -288,6 +288,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			bool isSelected = MusicScoreMakerData?.SelectedNoteTargetIdSet?.Contains(noteBase.id) == true;
 			UpdateNoteColor(isSelected);
+			bool hideArtCaps = !string.IsNullOrEmpty(noteBase.ArtGroupId) && !(isSelected && MusicScoreMakerData.SelectedNoteTargetIdSet.Count == 1);
+			if (_noteImage != null) _noteImage.canvasRenderer.SetAlpha(hideArtCaps ? 0f : 1f);
+			if (_connectionImage != null) _connectionImage.canvasRenderer.SetAlpha(hideArtCaps ? 0f : 1f);
 		}
 
 		private void UpdateNoteColor(bool isSelected)

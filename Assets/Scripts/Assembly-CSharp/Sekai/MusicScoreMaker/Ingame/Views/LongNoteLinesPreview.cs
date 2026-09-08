@@ -58,14 +58,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void Setup(int linePoolCount = 10)
 		{
+			HideAllLines();
 			_initialLinePoolCount = Mathf.Max(linePoolCount, 0);
-			_spriteCache = new Dictionary<(NoteType, NoteCategory), Sprite>();
-			_activeLines = new Dictionary<int, LongNoteLinePreview>();
-			_linePool = new List<LongNoteLinePreview>(_initialLinePoolCount);
-			_tempConnectedNotes = new List<MusicScoreNoteBase>();
-			_activeLineIds = new HashSet<int>();
-			_prevActiveLineIds = new HashSet<int>();
-			_lineIdsToHide = new List<int>();
+			_spriteCache ??= new Dictionary<(NoteType, NoteCategory), Sprite>();
+			_activeLines ??= new Dictionary<int, LongNoteLinePreview>();
+			_linePool ??= new List<LongNoteLinePreview>(_initialLinePoolCount);
+			_tempConnectedNotes ??= new List<MusicScoreNoteBase>();
+			_activeLineIds ??= new HashSet<int>();
+			_prevActiveLineIds ??= new HashSet<int>();
+			_lineIdsToHide ??= new List<int>();
 			_cachedParentRectTransform = transform.parent as RectTransform;
 			InitializeSpriteCache();
 			InitializeLinePool();
@@ -82,12 +83,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				return;
 			}
-			if (_linePool.Count > 0 || _activeLines.Count > 0 || _initialLinePoolCount < 1)
-			{
-				return;
-			}
-
-			for (int i = 0; i < _initialLinePoolCount; i++)
+			for (int i = _linePool.Count + _activeLines.Count; i < _initialLinePoolCount; i++)
 			{
 				LongNoteLinePreview line = CreateNewLineInstance();
 				if (line != null)
@@ -302,6 +298,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			line.UpdateView(new LongNoteLinePreview.ViewData
 			{
 				ParentId = nextNote.id,
+				ArtColor = !string.IsNullOrEmpty(note.ArtGroupId) || note.GuideStartOffset != 0 || note.GuideEndOffset != 0
+					? (note.type == NoteType.Critical ? new Color32(255, 211, 64, 255) : new Color32(56, 236, 162, 255)) : (Color?)null,
 				StartLeft = startLeft,
 				StartRight = startRight,
 				EndLeft = endLeft,
@@ -326,8 +324,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			MusicScoreMakerUtility.CalcNoteOperation(MusicScoreMakerData, ref ticks, ref laneStart, ref laneEnd, note);
 			float laneWidth = parentSizeDelta.x / MusicScoreMakerModel.LaneCount;
 			float y = parentSizeDelta.y * MusicScoreMakerUtility.CalcNormalizedPositionFromTicks(startTicks, endTicks, ticks) - parentSizeDelta.y * 0.5f;
-			Vector2 left = new Vector2(laneWidth * laneStart - parentSizeDelta.x * 0.5f, y);
-			Vector2 right = new Vector2(laneWidth * (laneEnd + 1) - parentSizeDelta.x * 0.5f, y);
+			Vector2 left = new Vector2(laneWidth * (laneStart + note.GuideStartOffset) - parentSizeDelta.x * 0.5f, y);
+			Vector2 right = new Vector2(laneWidth * (laneEnd + 1 + note.GuideEndOffset) - parentSizeDelta.x * 0.5f, y);
 			return (left, right);
 		}
 

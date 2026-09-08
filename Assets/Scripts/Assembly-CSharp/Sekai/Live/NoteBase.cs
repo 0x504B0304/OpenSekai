@@ -86,6 +86,11 @@ namespace Sekai.Live
 			}
 		}
 
+		public float GuideStartOffset { get; set; }
+		public float GuideEndOffset { get; set; }
+		[JsonIgnore] public float DefaultLeftLaneF => DefaultLeftLane + GuideStartOffset;
+		[JsonIgnore] public float DefaultRightLaneF => DefaultRightLane + GuideEndOffset;
+
 		public int DefaultLeftLane
 		{
 			[CompilerGenerated]

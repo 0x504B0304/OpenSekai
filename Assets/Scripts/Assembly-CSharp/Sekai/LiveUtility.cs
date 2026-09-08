@@ -375,8 +375,8 @@ namespace Sekai
 			}
 
 			var progress = Mathf.Clamp01(LiveConfig.GetNoteLineParentProgress(currentFrameInfo.time, currentNote, nextNote));
-			noteBase.LaneStartF = Mathf.Lerp(currentNote.DefaultLeftLane, nextNote.DefaultLeftLane, progress);
-			noteBase.LaneEndF = Mathf.Lerp(currentNote.DefaultRightLane, nextNote.DefaultRightLane, progress);
+			noteBase.LaneStartF = Mathf.Lerp(currentNote.DefaultLeftLaneF, nextNote.DefaultLeftLaneF, progress);
+			noteBase.LaneEndF = Mathf.Lerp(currentNote.DefaultRightLaneF, nextNote.DefaultRightLaneF, progress);
 
 			if (childNote == null)
 			{

@@ -11,6 +11,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 	public class MusicScoreMakerData
 	{
 		public const int VERSION_1 = 1;
+		public const int VERSION_2 = 2;
 
 		[JsonIgnore]
 		private Dictionary<int, MusicScoreNoteBase> _noteIdCache;
@@ -59,6 +60,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 		[JsonIgnore]
 		public List<MusicScoreEventData> CopiedEventDataList;
+
+		[JsonIgnore]
+		public List<ArtGroupData> CopiedArtGroups;
 
 		[JsonIgnore]
 		public SelectedTargetOperation SelectedTargetOperation;
@@ -209,6 +213,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 		public List<MusicScoreNoteBase> NoteList { get; set; }
 
+		public List<ArtGroupData> ArtGroups { get; set; }
+
 		[JsonIgnore]
 		public List<InvalidPlacementInfo> InvalidPlacements { get; set; }
 
@@ -262,7 +268,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 		private static int GetVersionCodeFromDataVersion()
 		{
-			return VERSION_1;
+			return VERSION_2;
 		}
 
 		public static bool IsOlderVersion(int version)
@@ -285,6 +291,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			InitializeRuntimeState();
 			MusicScoreEventDataList = new List<MusicScoreEventData>();
 			NoteList = new List<MusicScoreNoteBase>();
+			ArtGroups = new List<ArtGroupData>();
 			InvalidPlacements = new List<InvalidPlacementInfo>();
 			SelectedNoteIdList = new List<int>();
 			SelectedTemporaryNoteIdList = new List<int>();
@@ -292,6 +299,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			SelectedTemporaryEventIdList = new List<int>();
 			CopiedNoteList = new List<MusicScoreNoteBase>();
 			CopiedEventDataList = new List<MusicScoreEventData>();
+			CopiedArtGroups = new List<ArtGroupData>();
 			EventArray = Array.Empty<EventBase>();
 			QuantizeSettings = new QuantizeSettings();
 			VersionCode = CURRENT_VERSION;
@@ -1656,14 +1664,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			}
 			int defaultLeftLane = note.DefaultLeftLane;
 			int defaultRightLane = note.DefaultRightLane;
+			float laneStartF = note.LaneStartF;
+			float laneEndF = note.LaneEndF;
+			(note.GuideStartOffset, note.GuideEndOffset) = (-note.GuideEndOffset, -note.GuideStartOffset);
 			note.DefaultLeftLane = MusicScoreMakerModel.LaneCountMinus1 - defaultRightLane;
 			note.DefaultRightLane = MusicScoreMakerModel.LaneCountMinus1 - defaultLeftLane;
 			int laneStart = note.LaneStart;
 			int laneEnd = note.LaneEnd;
 			note.LaneStart = MusicScoreMakerModel.LaneCountMinus1 - laneEnd;
 			note.LaneEnd = MusicScoreMakerModel.LaneCountMinus1 - laneStart;
-			float laneStartF = note.LaneStartF;
-			float laneEndF = note.LaneEndF;
 			note.LaneStartF = MusicScoreMakerModel.LaneCountMinus1 - laneEndF;
 			note.LaneEndF = MusicScoreMakerModel.LaneCountMinus1 - laneStartF;
 			float judgeLaneStart = note.JudgeLaneStart;
@@ -2634,6 +2643,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		public void MigrateToCurrentVersion()
 		{
 			int oldVersion = VersionCode;
+			ArtGroups ??= new List<ArtGroupData>();
 			if (oldVersion != 0)
 			{
 				VersionCode = CURRENT_VERSION;
@@ -2677,6 +2687,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				EventArray = EventArray ?? Array.Empty<EventBase>(),
 				QuantizeSettings = QuantizeSettings
 			};
+			clone.ArtGroups = new List<ArtGroupData>(ArtGroups?.Count ?? 0);
+			if (ArtGroups != null)
+			{
+				foreach (ArtGroupData group in ArtGroups)
+				{
+					clone.ArtGroups.Add(group?.Clone());
+				}
+			}
 			clone.NoteList = new List<MusicScoreNoteBase>(NoteList?.Count ?? 0);
 			if (NoteList != null)
 			{

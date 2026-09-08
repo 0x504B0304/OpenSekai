@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -99,6 +100,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private bool _refreshRequested;
 
+		private double _wheelScrollRemainderTicks;
+
 		private CancellationTokenSource _cancellationTokenSource;
 
 		public RectTransform NotesViewRectTransform
@@ -182,6 +185,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			SafeDisposeCancellation();
 			_updateRequested = false;
 			_refreshRequested = false;
+			_wheelScrollRemainderTicks = 0;
 			_cachedNoteInstanceRect = null;
 			_cachedBalloonInstanceRect = null;
 			_cachedSubWindows = null;
@@ -381,9 +385,20 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private static bool GetIsShowExpand(MusicScoreMakerData musicScore)
 		{
 			HashSet<int> selectedNoteTargetIdSet = musicScore?.SelectedNoteTargetIdSet;
-			if (selectedNoteTargetIdSet == null || selectedNoteTargetIdSet.Count != 1)
+			if (selectedNoteTargetIdSet == null || selectedNoteTargetIdSet.Count == 0)
 			{
 				return false;
+			}
+			if (selectedNoteTargetIdSet.Count > 1)
+			{
+				string artGroupId = null;
+				foreach (int noteId in selectedNoteTargetIdSet)
+				{
+					MusicScoreNoteBase selected = musicScore.FindNote(noteId);
+					if (selected == null || string.IsNullOrEmpty(selected.ArtGroupId) || artGroupId != null && artGroupId != selected.ArtGroupId) return false;
+					artGroupId = selected.ArtGroupId;
+				}
+				return musicScore.NoteList != null && musicScore.NoteList.Where(note => note?.ArtGroupId == artGroupId).All(note => selectedNoteTargetIdSet.Contains(note.id));
 			}
 			foreach (int noteId in selectedNoteTargetIdSet)
 			{
@@ -478,8 +493,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 						int noteLaneStart = note.laneStart;
 						int noteLaneEnd = note.laneEnd;
 						MusicScoreMakerUtility.CalcNoteOperation(musicScore, ref ticks, ref noteLaneStart, ref noteLaneEnd, note);
-						laneStart = noteLaneStart;
-						laneEnd = noteLaneEnd;
+						laneStart = noteLaneStart + note.GuideStartOffset;
+						laneEnd = noteLaneEnd + note.GuideEndOffset;
 					}
 
 					(float centerX, float width) = MusicScoreMakerUtility.CalcPreviewCenterXAndWidth(laneStart, laneEnd, notesRect.width, Vector2.zero);
@@ -593,7 +608,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private void OnPointerDown(PointerEventData eventData)
 		{
-			MusicScoreMakerEventDispatcher.Instance.Publish(new OnMusicScorePreviewPointerDownEvent());
+			MusicScoreMakerEventDispatcher.Instance.Publish(new OnMusicScorePreviewPointerDownEvent
+			{
+				EventData = eventData
+			});
 		}
 
 		private void OnPointerUp(PointerEventData eventData, bool isLongPress, bool isDragging)
@@ -612,6 +630,46 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				EventData = eventData
 			});
+		}
+
+		public void HandleMouseWheel(PointerEventData eventData, bool zoom)
+		{
+			if (eventData == null || eventData.used || !isActiveAndEnabled || _rectTransform == null
+				|| !MusicScoreMakerEventDispatcher.ExistsInstance || MusicScoreMakerUtility.IsMusicPlaying()
+				|| IsSelectedObjectExpandInputDragging() || IsDialogOrSubWindowActive()) return;
+			float delta = eventData.scrollDelta.y;
+			if (delta == 0f || float.IsNaN(delta) || float.IsInfinity(delta)) return;
+			GameObject target = eventData.pointerCurrentRaycast.gameObject;
+			if (target == null || !RectTransformUtility.RectangleContainsScreenPoint(_rectTransform, eventData.position, eventData.enterEventCamera)) return;
+			// Selection handles live outside the preview hierarchy, but belong to the same editor.
+			var selection = target.GetComponentInParent<SelectedObjectEditUIView>();
+			var editor = GetComponentInParent<MusicScoreMakerView>();
+			bool isOwnSelection = selection != null && editor != null && selection.GetComponentInParent<MusicScoreMakerView>() == editor;
+			if (!target.transform.IsChildOf(transform) && !isOwnSelection) return;
+			if (target.GetComponentInParent<UnityEngine.UI.Selectable>() != null) return;
+			GameObject focused = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+			if (focused != null && (focused.GetComponent<TMPro.TMP_InputField>()?.isFocused == true
+				|| focused.GetComponent<UnityEngine.UI.InputField>()?.isFocused == true)) return;
+
+			eventData.Use();
+			if (zoom)
+			{
+				_wheelScrollRemainderTicks = 0;
+				// Scale is the visible time span: a smaller value makes notes farther apart.
+				float scale = MusicScoreMakerUtility.GetCurrentMusicScoreScale() - delta * MusicScoreMakerSettingsManager.ZoomTimelineStep;
+				MusicScoreMakerEventDispatcher.Instance.Publish(new SetZoomTimelineScaleEvent
+				{
+					Scale = Mathf.Clamp(scale, MusicScoreMakerSettingsManager.ZoomTimelineScaleMin, MusicScoreMakerSettingsManager.ZoomTimelineScaleMax)
+				});
+				return;
+			}
+
+			double movement = delta * Math.Max(1L, MusicScoreMakerUtility.GetShowTicksRange()) * .1 + _wheelScrollRemainderTicks;
+			long focus = MusicScoreMakerUtility.GetFocusTicks();
+			double destination = Math.Max(0, Math.Min(MusicScoreMakerUtility.GetMusicScoreTicksMax(), focus + movement));
+			long ticks = (long)destination;
+			_wheelScrollRemainderTicks = destination - ticks;
+			MusicScoreMakerUtility.SetFocusTicks(ticks);
 		}
 
 		private void OnPinch(float pinchDelta)

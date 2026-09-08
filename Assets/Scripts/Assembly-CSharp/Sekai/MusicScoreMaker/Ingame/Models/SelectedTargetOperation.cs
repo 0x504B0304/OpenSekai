@@ -7,7 +7,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			none = 0,
 			center = 1,
 			left = 2,
-			right = 3
+			right = 3,
+			top = 4,
+			bottom = 5
 		}
 
 		private const float DRAG_TO_LANE_COEFFICIENT = 0.01f;

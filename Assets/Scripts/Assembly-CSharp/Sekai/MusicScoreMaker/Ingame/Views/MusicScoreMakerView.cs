@@ -8,14 +8,24 @@ using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
 using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
+using Sekai.MusicScoreMaker.Ingame.Presenters;
 using Sekai.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
 namespace Sekai.MusicScoreMaker.Ingame.Views
 {
-	public class MusicScoreMakerView : MonoBehaviour
+	public class MusicScoreMakerView : MonoBehaviour, IScrollHandler
 	{
+		public void OnScroll(PointerEventData eventData)
+		{
+#if UNITY_STANDALONE || UNITY_EDITOR
+			if (!isActiveAndEnabled || UnityEngine.Input.GetMouseButton(0) || UnityEngine.Input.GetMouseButton(1) || UnityEngine.Input.GetMouseButton(2)) return;
+			bool zoom = UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl);
+			_musicScorePreview?.HandleMouseWheel(eventData, zoom);
+#endif
+		}
+
 		[StructLayout((LayoutKind)3)]
 		[CompilerGenerated]
 		private struct _003CSetup_003Ed__34 : IAsyncStateMachine
@@ -156,6 +166,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private GameObject _toolWindowObject;
+
+		private ArtToolsRuntimePanel _artToolsRuntimePanel;
 
 		private SubWindowSlideAnimationController[] _subWindowSlideAnimationControllers;
 
@@ -474,6 +486,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_presenterUpdateAction = action;
 		}
 
+		public void SetupArtTools(MusicScoreMakerPresenter presenter)
+		{
+			Transform parent = _toolWindowObject != null ? _toolWindowObject.transform : transform;
+			ArtToolsRuntimePanel.Attach(parent, presenter);
+			_artToolsRuntimePanel = parent.GetComponent<ArtToolsRuntimePanel>();
+		}
+
+		public void CloseArtToolsPanel()
+		{
+			_artToolsRuntimePanel?.Close();
+		}
+
 		private void OnUpdateMusicScore(UpdateMusicScoreEvent obj)
 		{
 			UpdateScrollLimitButtonsState();
@@ -556,6 +580,72 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private void Update()
 		{
 			_presenterUpdateAction?.Invoke();
+#if UNITY_STANDALONE || UNITY_EDITOR
+			if (!Application.isFocused
+				|| !(UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl))
+				|| UnityEngine.Input.GetKey(KeyCode.LeftAlt) || UnityEngine.Input.GetKey(KeyCode.RightAlt)
+				|| UnityEngine.Input.GetMouseButton(0) || UnityEngine.Input.GetMouseButton(1)
+				|| UnityEngine.Input.GetMouseButton(2) || UnityEngine.Input.touchCount > 0) return;
+			bool shift = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
+			if (UnityEngine.Input.GetKeyDown(KeyCode.Z)) TryHandleHistoryShortcut(shift);
+			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.S)) TryHandleSaveShortcut();
+			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.C)) TryHandleClipboardShortcut(KeyCode.C);
+			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.X)) TryHandleClipboardShortcut(KeyCode.X);
+			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.V)) TryHandleClipboardShortcut(KeyCode.V);
+#endif
+		}
+
+		private bool TryHandleHistoryShortcut(bool redo)
+		{
+			if (!CanHandleEditorShortcut()) return false;
+			CustomButton button = redo ? _redoButton : _undoButton;
+			if (button == null || !button.isActiveAndEnabled || !button.IsInteractable()) return false;
+			MusicScoreMakerEventDispatcher dispatcher = MusicScoreMakerEventDispatcher.Instance;
+			if (!(redo ? dispatcher.CanRedo : dispatcher.CanUndo)) return false;
+			if (redo) dispatcher.Publish(new RedoEvent());
+			else dispatcher.Publish(new UndoEvent());
+			return true;
+		}
+
+		private bool TryHandleSaveShortcut()
+		{
+			if (!CanHandleEditorShortcut()) return false;
+			MusicScoreMakerEventDispatcher.Instance.Publish(new QuickSaveMusicScoreEvent());
+			return true;
+		}
+
+		private bool TryHandleClipboardShortcut(KeyCode key)
+		{
+			if (!CanHandleEditorShortcut()) return false;
+			MusicScoreMakerEventDispatcher dispatcher = MusicScoreMakerEventDispatcher.Instance;
+			switch (key)
+			{
+				case KeyCode.C:
+				case KeyCode.X:
+					dispatcher.Publish(new CopySelectedNotesAndEventsEvent { IsCut = key == KeyCode.X });
+					return true;
+				case KeyCode.V:
+					dispatcher.Publish(new PasteCopiedNotesAndEventsEvent());
+					return true;
+				default:
+					return false;
+			}
+		}
+
+		private bool CanHandleEditorShortcut()
+		{
+			if (!isActiveAndEnabled || !MusicScoreMakerEventDispatcher.ExistsInstance) return false;
+			MusicScoreMakerEventDispatcher dispatcher = MusicScoreMakerEventDispatcher.Instance;
+			if (dispatcher.PublishFirst<IsEditRestrictedEvent, bool>(IsEditRestrictedEventCache)
+				|| dispatcher.PublishFirst<IsMusicPlayingEvent, bool>(IsMusicPlayingEventCache)) return false;
+			GameObject selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+			if (selected != null && (selected.GetComponentInParent<TMPro.TMP_InputField>() != null
+				|| selected.GetComponentInParent<UnityEngine.UI.InputField>() != null)) return false;
+			if (ScreenManager.ExistsInstance && ScreenManager.Instance.ExistsDialog()) return false;
+			foreach (var subWindow in FindObjectsOfType<SubWindowSlideAnimationController>(true))
+				if (subWindow != null && subWindow.gameObject.activeInHierarchy) return false;
+
+			return true;
 		}
 
 		private void RegisterEvents()

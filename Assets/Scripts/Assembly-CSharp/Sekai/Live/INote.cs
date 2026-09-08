@@ -11,6 +11,8 @@ namespace Sekai.Live
 		int DefaultLeftLane { get; }
 
 		int DefaultRightLane { get; }
+		float DefaultLeftLaneF { get; }
+		float DefaultRightLaneF { get; }
 
 		int LaneStart { get; set; }
 

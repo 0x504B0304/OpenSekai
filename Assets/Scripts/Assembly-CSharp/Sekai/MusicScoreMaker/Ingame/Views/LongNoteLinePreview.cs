@@ -29,6 +29,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			public int Index { [CompilerGenerated] readonly get; [CompilerGenerated] set; }
 
 			public int IndexMax { [CompilerGenerated] readonly get; [CompilerGenerated] set; }
+			public Color? ArtColor { get; set; }
 		}
 
 		private const float DefaultSegmentLength = 30f;
@@ -187,7 +188,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				return false;
 			}
-			return newData.LineType == oldData.LineType && newData.Index == oldData.Index && newData.IndexMax == oldData.IndexMax && newData.Sprite == oldData.Sprite;
+			return newData.LineType == oldData.LineType && newData.Index == oldData.Index && newData.IndexMax == oldData.IndexMax && newData.Sprite == oldData.Sprite && newData.ArtColor == oldData.ArtColor;
 		}
 
 		public void UpdateView(ViewData viewData, bool isSelected = false)
@@ -201,7 +202,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 
 			SetActive(true);
-			Texture texture = viewData.Sprite.texture;
+			Texture texture = viewData.ArtColor.HasValue ? Texture2D.whiteTexture : viewData.Sprite.texture;
+			color = viewData.ArtColor ?? Color.white;
 			if (_cachedTexture != texture || !_cachedIsSelected.HasValue || _cachedIsSelected.Value != isSelected)
 			{
 				_cachedTexture = texture;
@@ -229,6 +231,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_viewData = viewData;
 			_hasMeshData = true;
 			CacheSpriteUVs(viewData.Sprite);
+			if (viewData.ArtColor.HasValue) { _cachedUV_u0 = _cachedUV_v0y = 0f; _cachedUV_u1 = _cachedUV_v2y = 1f; _cachedSprite = null; }
 			SetVerticesDirty();
 		}
 
@@ -264,7 +267,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		public void UpdateColor(bool isSelected)
 		{
 			_cachedIsSelected = isSelected;
-			color = Color.white;
+			color = _viewData.ArtColor ?? Color.white;
 			if (_cachedTexture != null)
 			{
 				material = GetOrCreateSharedMaterial(_cachedTexture, isSelected);

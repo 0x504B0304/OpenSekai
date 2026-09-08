@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -1010,6 +1012,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private bool _isTemporaryAreaSelectionActive;
 
+		private bool _isRightButtonAreaSelectionActive;
+
 		private static readonly GetFocusTicksEvent _getFocusTicksEvent;
 
 		private List<MusicScoreNoteBase> _pasteNoteListCache;
@@ -1978,6 +1982,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnEventPreviewDrag(OnEventPreviewDragEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewDrag(new OnMusicScorePreviewDragEvent
+				{
+					EventData = obj.PointerEventData
+				});
+				return;
+			}
 			if (_model?.MusicScoreMakerData == null || obj == null)
 			{
 				return;
@@ -1991,6 +2003,16 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnEventPreviewPointerUp(OnEventPreviewPointerUpEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewPointerUp(new OnMusicScorePreviewPointerUpEvent
+				{
+					EventData = obj.PointerEventData,
+					IsDragging = obj.IsDragging,
+					IsLongPress = obj.IsLongPress
+				});
+				return;
+			}
 			NotifyMusicScoreAndTimelineChanged();
 		}
 
@@ -3206,6 +3228,255 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			return _model?.MusicScoreMakerData;
 		}
 
+		public void GenerateArtGroup(ArtGroupData group, IReadOnlyList<MusicScoreNoteBase> generatedNotes)
+		{
+			MusicScoreMakerData data = CurrentData();
+			if (data == null || group == null || generatedNotes == null || generatedNotes.Count == 0 || _model?.IsEditRestricted == true) return;
+			if (string.IsNullOrEmpty(group.Id)) group.Id = Guid.NewGuid().ToString("N");
+			ArtGroupData storedGroup = group.Clone();
+			List<MusicScoreNoteBase> notes = new List<MusicScoreNoteBase>(generatedNotes.Count);
+			foreach (MusicScoreNoteBase source in generatedNotes)
+			{
+				if (source == null) continue;
+				MusicScoreNoteBase note = source.Clone();
+				note.ArtGroupId = storedGroup.Id;
+				notes.Add(note);
+			}
+			if (notes.Count == 0) return;
+			Action redo = () =>
+			{
+				data.ArtGroups ??= new List<ArtGroupData>();
+				data.ArtGroups.RemoveAll(candidate => candidate?.Id == storedGroup.Id);
+				data.ArtGroups.Add(storedGroup);
+				data.AddNoteRange(notes);
+				data.UpdateConnectionNotes();
+				SelectArtGroupInternal(data, storedGroup.Id);
+				NotifyMusicScoreAndTimelineChanged(refresh: true);
+			};
+			Action undo = () =>
+			{
+				data.RemoveNoteRange(notes);
+				data.ArtGroups?.RemoveAll(candidate => candidate?.Id == storedGroup.Id);
+				data.ClearSelectedNotes();
+				NotifyMusicScoreAndTimelineChanged(refresh: true);
+			};
+			PushUndoableAction(undo, redo, storedGroup.OriginTicks, storedGroup.OriginTicks);
+		}
+
+		public long CurrentFocusTicks => _model?.FocusTicks ?? 0L;
+
+		public long CurrentQuantizeTicks => Math.Max(1L, _model?.QuantizeTicks ?? 120L);
+
+		public async UniTask CreateTextArtAsync(TextArtSettings settings, long originTicks, int originLane, NoteType noteType, CancellationToken cancellationToken = default)
+		{
+			MusicScoreMakerData data = CurrentData();
+			if (data == null || settings == null) return;
+			ArtGroupData group = new ArtGroupData
+			{
+				Type = ArtGroupType.Text,
+				SourceAssetHash = settings.FontAssetHash,
+				OriginTicks = Math.Max(0, originTicks),
+				OriginLane = Mathf.Clamp(originLane, 0, 11),
+				NoteType = noteType,
+				LineWidth = Mathf.Max(0.05f, settings.StrokeWidth),
+				TextSettings = settings.Clone()
+			};
+			ArtStrokeData strokes = settings.FontMode == TextArtFontMode.Hershey
+				? await TextArtVectorizer.VectorizeHersheyAndCjkAsync(settings.Text, cancellationToken)
+				: CustomFontArtVectorizer.Vectorize(settings.Text, settings.FontAssetHash, settings.FontMode);
+			cancellationToken.ThrowIfCancellationRequested();
+			List<MusicScoreNoteBase> notes = ArtGuideGenerator.GenerateTextNotes(strokes, group, data.GetNewId);
+			GenerateArtGroup(group, notes);
+		}
+
+		public void CreateImageArt(ImageArtSettings settings, long originTicks, int originLane, NoteType noteType)
+		{
+			MusicScoreMakerData data = CurrentData();
+			if (data == null || settings == null || !ArtAssetCache.TryRead(settings.ImageAssetHash, out byte[] bytes, out _)) throw new FileNotFoundException("The cached image source is missing.");
+			Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false);
+			try
+			{
+				if (!texture.LoadImage(bytes, false)) throw new InvalidDataException("The selected image could not be decoded.");
+				ArtGroupData group = new ArtGroupData
+				{
+					Type = ArtGroupType.Image,
+					SourceAssetHash = settings.ImageAssetHash,
+					OriginTicks = Math.Max(0, originTicks),
+					OriginLane = Mathf.Clamp(originLane, 0, 11),
+					NoteType = noteType,
+					LineWidth = settings.AnchorWidth,
+					ImageSettings = settings.Clone()
+				};
+				BinaryImageArt art = ArtGuideGenerator.RasterizeImage(texture, settings);
+				List<MusicScoreNoteBase> notes = ArtGuideGenerator.GenerateImageNotes(art, group, data.GetNewId);
+				if (notes.Count == 0) throw new InvalidOperationException("The selected image contains no foreground pixels.");
+				GenerateArtGroup(group, notes);
+			}
+			finally
+			{
+				UnityEngine.Object.Destroy(texture);
+			}
+		}
+
+		public bool ReplaceArtGroup(string groupId, ArtGroupData replacement, IReadOnlyList<MusicScoreNoteBase> generatedNotes, bool overwriteManualEdits)
+		{
+			MusicScoreMakerData data = CurrentData();
+			ArtGroupData existing = data?.ArtGroups?.Find(group => group?.Id == groupId);
+			if (existing == null || replacement == null || generatedNotes == null || generatedNotes.Count == 0 || _model?.IsEditRestricted == true) return false;
+			if (existing.IsManuallyEdited && !overwriteManualEdits) return false;
+			List<MusicScoreNoteBase> beforeNotes = data.NoteList.FindAll(note => note?.ArtGroupId == groupId);
+			List<MusicScoreNoteBase> afterNotes = new List<MusicScoreNoteBase>(generatedNotes.Count);
+			replacement.Id = groupId;
+			ArtGroupData beforeGroup = existing.Clone();
+			ArtGroupData afterGroup = replacement.Clone();
+			foreach (MusicScoreNoteBase source in generatedNotes)
+			{
+				if (source == null) continue;
+				MusicScoreNoteBase note = source.Clone();
+				note.ArtGroupId = groupId;
+				afterNotes.Add(note);
+			}
+			Action applyBefore = () => ApplyArtGroupReplacement(data, groupId, afterNotes, beforeNotes, afterGroup, beforeGroup);
+			Action applyAfter = () => ApplyArtGroupReplacement(data, groupId, beforeNotes, afterNotes, beforeGroup, afterGroup);
+			PushUndoableAction(applyBefore, applyAfter, beforeGroup.OriginTicks, afterGroup.OriginTicks);
+			return true;
+		}
+
+		public void TransformArtGroup(string groupId, int deltaLane, long deltaTicks, float scaleX, float scaleY)
+		{
+			MusicScoreMakerData data = CurrentData();
+			ArtGroupData group = data?.ArtGroups?.Find(candidate => candidate?.Id == groupId);
+			List<MusicScoreNoteBase> notes = data?.NoteList?.FindAll(note => note?.ArtGroupId == groupId);
+			if (group == null || notes == null || notes.Count == 0 || _model?.IsEditRestricted == true) return;
+			float left = notes.Min(n => n.GuideLeft), right = notes.Max(n => n.GuideRight);
+			long bottom = notes.Min(n => n.ticks), top = notes.Max(n => n.ticks);
+			float width = Mathf.Min(12f, (right - left) * Mathf.Max(.01f, scaleX));
+			float newLeft = Mathf.Clamp(left + deltaLane, 0, 12f - width);
+			long newBottom = Math.Max(0, bottom + deltaTicks);
+			var replacement = group.Clone();
+			var transformed = ArtGroupTransform.Resize(notes, replacement, newLeft, newLeft + width, newBottom, newBottom + Math.Max(1, (long)Math.Round((top - bottom) * scaleY)));
+			ReplaceArtGroup(groupId, replacement, transformed, true);
+		}
+
+		public void DeleteArtGroup(string groupId)
+		{
+			MusicScoreMakerData data = CurrentData();
+			ArtGroupData group = data?.ArtGroups?.Find(candidate => candidate?.Id == groupId);
+			List<MusicScoreNoteBase> notes = data?.NoteList?.FindAll(note => note?.ArtGroupId == groupId);
+			if (group == null || notes == null || notes.Count == 0 || _model?.IsEditRestricted == true) return;
+			Action redo = () =>
+			{
+				data.RemoveNoteRange(notes);
+				data.ArtGroups.RemoveAll(candidate => candidate?.Id == groupId);
+				data.ClearSelectedNotes();
+				NotifyMusicScoreAndTimelineChanged(refresh: true);
+			};
+			Action undo = () =>
+			{
+				data.ArtGroups.Add(group);
+				data.AddNoteRange(notes);
+				data.UpdateConnectionNotes();
+				SelectArtGroupInternal(data, groupId);
+				NotifyMusicScoreAndTimelineChanged(refresh: true);
+			};
+			PushUndoableAction(undo, redo, group.OriginTicks, group.OriginTicks);
+		}
+
+		public void SelectArtGroup(string groupId)
+		{
+			MusicScoreMakerData data = CurrentData();
+			if (data == null) return;
+			SelectArtGroupInternal(data, groupId);
+			NotifyMusicScoreAndTimelineChanged();
+		}
+
+		public ArtGroupData GetSelectedArtGroup()
+		{
+			MusicScoreMakerData data = CurrentData();
+			if (data?.ArtGroups == null || data.SelectedNoteTargetIdSet == null || data.SelectedNoteTargetIdSet.Count == 0) return null;
+			foreach (ArtGroupData group in data.ArtGroups)
+			{
+				if (group == null || string.IsNullOrEmpty(group.Id)) continue;
+				List<int> noteIds = GetArtGroupNoteIds(data, group.Id);
+				if (noteIds.Count > 0 && noteIds.All(data.SelectedNoteTargetIdSet.Contains)) return group.Clone();
+			}
+			return null;
+		}
+
+		public async UniTask<bool> RegenerateArtGroupAsync(string groupId, bool overwriteManualEdits, CancellationToken cancellationToken = default, ArtGroupData editedSettings = null)
+		{
+			MusicScoreMakerData data = CurrentData();
+			ArtGroupData current = data?.ArtGroups?.Find(candidate => candidate?.Id == groupId);
+			if (current == null) return false;
+			if (current.IsManuallyEdited && !overwriteManualEdits) return false;
+
+			ArtGroupData replacement = (editedSettings ?? current).Clone();
+			replacement.IsManuallyEdited = false;
+			List<MusicScoreNoteBase> notes;
+			if (replacement.Type == ArtGroupType.Text)
+			{
+				TextArtSettings settings = replacement.TextSettings ?? throw new InvalidDataException("The text art settings are missing.");
+				ArtStrokeData strokes = settings.FontMode == TextArtFontMode.Hershey
+					? await TextArtVectorizer.VectorizeHersheyAndCjkAsync(settings.Text, cancellationToken)
+					: CustomFontArtVectorizer.Vectorize(settings.Text, settings.FontAssetHash, settings.FontMode);
+				cancellationToken.ThrowIfCancellationRequested();
+				notes = ArtGuideGenerator.GenerateTextNotes(strokes, replacement, data.GetNewId);
+			}
+			else
+			{
+				ImageArtSettings settings = replacement.ImageSettings ?? throw new InvalidDataException("The image art settings are missing.");
+				if (!ArtAssetCache.TryRead(settings.ImageAssetHash, out byte[] bytes, out _)) throw new FileNotFoundException("The cached image source is missing.");
+				Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false);
+				try
+				{
+					if (!texture.LoadImage(bytes, false)) throw new InvalidDataException("The selected image could not be decoded.");
+					BinaryImageArt art = ArtGuideGenerator.RasterizeImage(texture, settings);
+					notes = ArtGuideGenerator.GenerateImageNotes(art, replacement, data.GetNewId);
+				}
+				finally
+				{
+					UnityEngine.Object.Destroy(texture);
+				}
+			}
+
+			if (notes.Count == 0) throw new InvalidOperationException("The art settings produced no guide nodes.");
+			cancellationToken.ThrowIfCancellationRequested();
+			if (CurrentData() != data || data.ArtGroups.Find(candidate => candidate?.Id == groupId) != current) return false;
+			return ReplaceArtGroup(groupId, replacement, notes, overwriteManualEdits);
+		}
+
+		private void ApplyArtGroupReplacement(MusicScoreMakerData data, string groupId, List<MusicScoreNoteBase> remove, List<MusicScoreNoteBase> add, ArtGroupData removeGroup, ArtGroupData addGroup)
+		{
+			data.RemoveNoteRange(remove);
+			data.AddNoteRange(add);
+			data.ArtGroups.RemoveAll(candidate => candidate?.Id == groupId);
+			data.ArtGroups.Add(addGroup);
+			data.UpdateConnectionNotes();
+			SelectArtGroupInternal(data, groupId);
+			NotifyMusicScoreAndTimelineChanged(refresh: true);
+		}
+
+		private static void SelectArtGroupInternal(MusicScoreMakerData data, string groupId)
+		{
+			data.ClearSelectedNotes();
+			data.ClearSelectedTemporaryNotes();
+			data.ClearSelectedEvents();
+			data.ClearSelectedTemporaryEvents();
+			data.AddSelectedNoteRange(GetArtGroupNoteIds(data, groupId));
+			data.SelectedTargetOperation = null;
+		}
+
+		private static List<int> GetArtGroupNoteIds(MusicScoreMakerData data, string groupId)
+		{
+			List<int> result = new List<int>();
+			if (data?.NoteList == null || string.IsNullOrEmpty(groupId)) return result;
+			foreach (MusicScoreNoteBase note in data.NoteList)
+			{
+				if (note?.ArtGroupId == groupId) result.Add(note.id);
+			}
+			return result;
+		}
+
 		private void PushUndoableAction(Action undoAction, Action redoAction, long focusTicksAfterUndo = -1L, long focusTicksAfterRedo = -1L, bool skipEditGuard = false)
 		{
 			if (MusicScoreMakerEventDispatcher.ExistsInstance)
@@ -3272,6 +3543,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			target.ticks = source.ticks;
 			target.laneStart = source.laneStart;
 			target.laneEnd = source.laneEnd;
+			target.GuideStartOffset = source.GuideStartOffset;
+			target.GuideEndOffset = source.GuideEndOffset;
+			target.ArtGroupId = source.ArtGroupId;
 			target.category = source.category;
 			target.type = source.type;
 			target.speedRatio = source.speedRatio;
@@ -4193,6 +4467,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 			int newStart = MusicScoreMakerModel.LaneCountMinus1 - note.laneEnd;
 			int newEnd = MusicScoreMakerModel.LaneCountMinus1 - note.laneStart;
+			(note.GuideStartOffset, note.GuideEndOffset) = (-note.GuideEndOffset, -note.GuideStartOffset);
 			note.laneStart = MusicScoreMakerUtility.ClampLaneStart(newStart, newEnd);
 			note.laneEnd = MusicScoreMakerUtility.ClampLaneEnd(newEnd, note.laneStart);
 		}
@@ -4783,6 +5058,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 			Dictionary<int, (NoteOperation before, NoteOperation after)> noteDataDict = CalcBeforeAfterNotesData(operation);
 			Dictionary<int, (EventOperation before, EventOperation after)> eventDataDict = CalcBeforeAfterEventData(operation.deltaTicks);
+			Dictionary<string, (ArtGroupData before, ArtGroupData after)> artGroupStates = CaptureArtGroupOperationStates(data, noteDataDict, operation);
 			if (noteDataDict.Count == 0 && eventDataDict.Count == 0)
 			{
 				data.SelectedTargetOperation = null;
@@ -4792,6 +5068,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			Action redo = () =>
 			{
 				ApplyOperationData(noteDataDict, eventDataDict, useAfter: true, beforeFocusTicks);
+				ApplyArtGroupOperationStates(data, artGroupStates, useAfter: true);
 				data.SelectedTargetOperation = null;
 				MusicScoreMakerUtility.AddEditedTicks(CollectEditedTicksFromOperations(noteDataDict, eventDataDict, useAfter: true));
 				RecheckJudgmentNoteGapIfEditedInGapRange();
@@ -4800,6 +5077,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			Action undo = () =>
 			{
 				ApplyOperationData(noteDataDict, eventDataDict, useAfter: false, beforeFocusTicks);
+				ApplyArtGroupOperationStates(data, artGroupStates, useAfter: false);
 				data.SelectedTargetOperation = null;
 				MusicScoreMakerUtility.AddEditedTicks(CollectEditedTicksFromOperations(noteDataDict, eventDataDict, useAfter: false));
 				RecheckJudgmentNoteGapIfEditedInGapRange();
@@ -4807,6 +5085,45 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			};
 			PushUndoableAction(undo, redo, beforeFocusTicks, beforeFocusTicks);
 			UpdateLastNoteWidthFromExpandOperation(operation, noteDataDict);
+		}
+
+		private static Dictionary<string, (ArtGroupData before, ArtGroupData after)> CaptureArtGroupOperationStates(MusicScoreMakerData data, Dictionary<int, (NoteOperation before, NoteOperation after)> noteOperations, SelectedTargetOperation operation)
+		{
+			Dictionary<string, (ArtGroupData before, ArtGroupData after)> result = new Dictionary<string, (ArtGroupData before, ArtGroupData after)>();
+			if (data?.ArtGroups == null || noteOperations == null || noteOperations.Count == 0) return result;
+			HashSet<string> touched = new HashSet<string>();
+			foreach (int noteId in noteOperations.Keys)
+			{
+				MusicScoreNoteBase note = data.FindNote(noteId);
+				if (!string.IsNullOrEmpty(note?.ArtGroupId)) touched.Add(note.ArtGroupId);
+			}
+			foreach (string groupId in touched)
+			{
+				ArtGroupData group = data.ArtGroups.Find(candidate => candidate?.Id == groupId);
+				if (group == null) continue;
+				ArtGroupData before = group.Clone();
+				ArtGroupData after = group.Clone();
+				List<int> allIds = GetArtGroupNoteIds(data, groupId);
+				bool completeGroup = allIds.Count > 0 && allIds.TrueForAll(noteOperations.ContainsKey);
+				if (completeGroup)
+				{
+					after.OriginLane = Mathf.Clamp(after.OriginLane + operation.deltaLane, 0, 11);
+					after.OriginTicks = Math.Max(0L, after.OriginTicks + operation.deltaTicks);
+				}
+				else after.IsManuallyEdited = true;
+				result[groupId] = (before, after);
+			}
+			return result;
+		}
+
+		private static void ApplyArtGroupOperationStates(MusicScoreMakerData data, Dictionary<string, (ArtGroupData before, ArtGroupData after)> states, bool useAfter)
+		{
+			if (data?.ArtGroups == null || states == null) return;
+			foreach (KeyValuePair<string, (ArtGroupData before, ArtGroupData after)> pair in states)
+			{
+				int index = data.ArtGroups.FindIndex(group => group?.Id == pair.Key);
+				if (index >= 0) data.ArtGroups[index] = (useAfter ? pair.Value.after : pair.Value.before).Clone();
+			}
 		}
 
 		private void UpdateLastNoteWidthFromExpandOperation(SelectedTargetOperation operation, Dictionary<int, (NoteOperation before, NoteOperation after)> noteDataDict)
@@ -4945,6 +5262,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Register<OnMusicScorePreviewPointerUpEvent>(OnMusicScorePreviewPointerUp);
 			dispatcher.Register<OnMusicScorePreviewPointerDownEvent>(OnMusicScorePreviewPointerDown);
 			dispatcher.Register<CopySelectedNotesAndEventsEvent>(CopySelectedNotesAndEvents);
+			dispatcher.Register<PasteCopiedNotesAndEventsEvent>(PasteCopiedNotesAndEvents);
 			dispatcher.Register<ShowClipboardCacheListEvent>(ShowClipboardCacheList);
 			dispatcher.Register<PasteFromClipboardCacheEvent>(PasteFromClipboardCache);
 			dispatcher.Register<OnExpandInputDragEvent>(OnExpandInputDrag);
@@ -4968,6 +5286,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Remove<OnMusicScorePreviewPointerUpEvent>(OnMusicScorePreviewPointerUp);
 			dispatcher.Remove<OnMusicScorePreviewPointerDownEvent>(OnMusicScorePreviewPointerDown);
 			dispatcher.Remove<CopySelectedNotesAndEventsEvent>(CopySelectedNotesAndEvents);
+			dispatcher.Remove<PasteCopiedNotesAndEventsEvent>(PasteCopiedNotesAndEvents);
 			dispatcher.Remove<ShowClipboardCacheListEvent>(ShowClipboardCacheList);
 			dispatcher.Remove<PasteFromClipboardCacheEvent>(PasteFromClipboardCache);
 			dispatcher.Remove<OnExpandInputDragEvent>(OnExpandInputDrag);
@@ -4979,6 +5298,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 		private void OnNotePreviewClick(OnNotePreviewClickEvent obj)
 		{
 			if (obj == null)
+			{
+				return;
+			}
+			if (IsDesktopRightButton(obj.PointerEventData))
 			{
 				return;
 			}
@@ -4994,6 +5317,26 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			MusicScoreMakerData data = CurrentData();
 			if (data == null)
 			{
+				return;
+			}
+			MusicScoreNoteBase clickedNote = data.FindNote(obj.NoteId);
+			if (clickedNote != null && !string.IsNullOrEmpty(clickedNote.ArtGroupId))
+			{
+				List<int> groupNoteIds = GetArtGroupNoteIds(data, clickedNote.ArtGroupId);
+				bool wholeGroupAlreadySelected = groupNoteIds.Count > 0 && groupNoteIds.TrueForAll(data.SelectedNoteIdList.Contains);
+				data.ClearSelectedNotes();
+				data.ClearSelectedEvents();
+				if (wholeGroupAlreadySelected)
+				{
+					data.AddSelectedNote(obj.NoteId);
+				}
+				else
+				{
+					data.AddSelectedNoteRange(groupNoteIds);
+				}
+				ResetCycleSelection();
+				PlayScoreMakerSe(SE_SCORE_NOTES_CHOICE_CUE_NAME, SE_DECIDE_CUE_NAME);
+				NotifyMusicScoreAndTimelineChanged();
 				return;
 			}
 
@@ -5111,6 +5454,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnNotePreviewDrag(OnNotePreviewDragEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewDrag(new OnMusicScorePreviewDragEvent
+				{
+					EventData = obj.PointerEventData
+				});
+				return;
+			}
 			MusicScoreMakerData data = CurrentData();
 			if (data == null || obj?.PointerEventData == null)
 			{
@@ -5149,6 +5500,16 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnNotePreviewPointerUp(OnNotePreviewPointerUpEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewPointerUp(new OnMusicScorePreviewPointerUpEvent
+				{
+					EventData = obj.PointerEventData,
+					IsDragging = obj.IsDragging,
+					IsLongPress = obj.IsLongPress
+				});
+				return;
+			}
 			MusicScoreMakerData data = CurrentData();
 			if (data == null || obj == null)
 			{
@@ -5277,7 +5638,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 		{
 			CancelScrollInertia();
 			_areaSelectDragMode = AreaSelectDragMode.Undecided;
-			if (_model?.AreaSelectMode == true)
+			_isRightButtonAreaSelectionActive = IsDesktopRightButton(obj?.EventData);
+			if (_model?.AreaSelectMode == true || _isRightButtonAreaSelectionActive)
 			{
 				ClearTemporaryAreaSelection();
 			}
@@ -5290,6 +5652,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 		private void OnMusicScorePreviewClick(OnMusicScorePreviewClickEvent obj)
 		{
 			if (obj == null || obj.EventData == null)
+			{
+				return;
+			}
+			if (IsDesktopRightButton(obj.EventData))
 			{
 				return;
 			}
@@ -5307,6 +5673,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			{
 				return;
 			}
+			if (_model?.IsMusicPlaying != true && TrySelectArtGroupAtPosition(obj.EventData, data)) return;
+			_view?.CloseArtToolsPanel();
 			if (data.SelectedNoteIdList.Count > 0 || data.SelectedTemporaryNoteIdList.Count > 0)
 			{
 				ClearSelectedList();
@@ -5318,6 +5686,21 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				ClearSelectedList();
 			}
 			SelectedToolTypeAction(obj);
+		}
+
+		private bool TrySelectArtGroupAtPosition(PointerEventData pointer, MusicScoreMakerData data)
+		{
+			RectTransform rect = _view != null ? _view.NotesViewRectTransform : null;
+			if (rect == null || !RectTransformUtility.RectangleContainsScreenPoint(rect, pointer.position, pointer.pressEventCamera)) return false;
+			Vector2 point = MusicScoreMakerUtility.CalcLocalPoint(pointer, pointer.position, rect);
+			string groupId = ArtGroupHitTest.FindGroup(data, point, rect.rect.size,
+				MusicScoreMakerUtility.GetPreviewStartTicks(), MusicScoreMakerUtility.GetPreviewEndTicks());
+			if (groupId == null) return false;
+			SelectArtGroupInternal(data, groupId);
+			ResetCycleSelection();
+			PlayScoreMakerSe(SE_SCORE_NOTES_CHOICE_CUE_NAME, SE_DECIDE_CUE_NAME);
+			NotifyMusicScoreAndTimelineChanged();
+			return true;
 		}
 
 		private bool TryGetMusicScoreEventTypeById(int id, out MusicScoreEventType eventType)
@@ -5358,11 +5741,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				return;
 			}
 			_musicScorePreviewDragPointerEventData = obj.EventData;
+			if (IsDesktopRightButton(obj.EventData) && !_isRightButtonAreaSelectionActive)
+			{
+				CancelScrollInertia();
+				_areaSelectDragMode = AreaSelectDragMode.Undecided;
+				ClearTemporaryAreaSelection();
+				_isRightButtonAreaSelectionActive = true;
+			}
 			if (_model == null)
 			{
 				return;
 			}
-			if (_model.IsEventSettingMode || !_model.AreaSelectMode || _model.IsMusicPlaying)
+			bool shouldAreaSelect = _model.AreaSelectMode || _isRightButtonAreaSelectionActive;
+			if (_model.IsEventSettingMode || !shouldAreaSelect || _model.IsMusicPlaying)
 			{
 				DragScroll();
 				return;
@@ -5375,7 +5766,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 					return;
 				}
 				float dragAngle = Mathf.Abs(Vector2.Angle(dragVector, Vector2.up));
-				if (dragAngle >= 30f && dragAngle <= 150f)
+				if (_isRightButtonAreaSelectionActive || dragAngle >= VERTICAL_DRAG_ANGLE_THRESHOLD && dragAngle <= 180f - VERTICAL_DRAG_ANGLE_THRESHOLD)
 				{
 					_areaSelectDragMode = AreaSelectDragMode.AreaSelect;
 					MusicScoreMakerData data = CurrentData();
@@ -5420,7 +5811,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnSetFocusTicksForAreaSelect(SetFocusTicksEvent obj)
 		{
-			if (_model?.AreaSelectMode == true && _isTemporaryAreaSelectionActive)
+			if ((_model?.AreaSelectMode == true || _isRightButtonAreaSelectionActive) && _isTemporaryAreaSelectionActive)
 			{
 				SelectedTemporaryInArea();
 			}
@@ -5476,6 +5867,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				if (isSelected)
 				{
 					selectedNoteIds.Add(note.id);
+				}
+			}
+			HashSet<string> groupIds = new HashSet<string>();
+			foreach (int noteId in selectedNoteIds)
+			{
+				MusicScoreNoteBase note = data.FindNote(noteId);
+				if (!string.IsNullOrEmpty(note?.ArtGroupId)) groupIds.Add(note.ArtGroupId);
+			}
+			if (groupIds.Count > 0)
+			{
+				foreach (MusicScoreNoteBase note in data.NoteList)
+				{
+					if (note != null && !string.IsNullOrEmpty(note.ArtGroupId) && groupIds.Contains(note.ArtGroupId) && !selectedNoteIds.Contains(note.id)) selectedNoteIds.Add(note.id);
 				}
 			}
 			data.AddSelectedTemporaryNoteRange(selectedNoteIds);
@@ -5663,19 +6067,20 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				}
 				_musicScorePreviewDragPointerEventData = null;
 				_areaSelectDragMode = AreaSelectDragMode.Undecided;
+				_isRightButtonAreaSelectionActive = false;
 				return;
 			}
 			if (obj.IsLongPress || !obj.IsDragging)
 			{
 				CancelScrollInertia();
 			}
-			else if (!_model.AreaSelectMode || _model.IsEventSettingMode || _model.IsMusicPlaying || _areaSelectDragMode == AreaSelectDragMode.Scroll)
+			else if ((!_model.AreaSelectMode && !_isRightButtonAreaSelectionActive) || _model.IsEventSettingMode || _model.IsMusicPlaying || _areaSelectDragMode == AreaSelectDragMode.Scroll)
 			{
 				TryStartScrollInertiaFromLastDrag();
 			}
 			else if (_areaSelectDragMode == AreaSelectDragMode.AreaSelect)
 			{
-				if (_model.RemoveMode)
+				if (_model.RemoveMode && !_isRightButtonAreaSelectionActive)
 				{
 					RemoveNotesInSelectedArea(obj);
 				}
@@ -5686,6 +6091,21 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 			_musicScorePreviewDragPointerEventData = null;
 			_areaSelectDragMode = AreaSelectDragMode.Undecided;
+			_isRightButtonAreaSelectionActive = false;
+		}
+
+		private static bool IsDesktopRightButton(PointerEventData eventData)
+		{
+#if UNITY_STANDALONE || UNITY_EDITOR
+			return IsRightButtonAreaSelectionForPlatform(eventData, true);
+#else
+			return IsRightButtonAreaSelectionForPlatform(eventData, false);
+#endif
+		}
+
+		private static bool IsRightButtonAreaSelectionForPlatform(PointerEventData eventData, bool desktopPointerSupported)
+		{
+			return desktopPointerSupported && eventData != null && eventData.button == PointerEventData.InputButton.Right;
 		}
 
 		private void RemoveNotesInSelectedArea(OnMusicScorePreviewPointerUpEvent onMusicScorePreviewPointerUpEvent)
@@ -5769,21 +6189,49 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 		private void CopySelectedNotesAndEvents(CopySelectedNotesAndEventsEvent evt)
 		{
 			MusicScoreMakerData data = CurrentData();
-			if (data == null || _model?.IsEditRestricted == true)
+			if (data == null || _model?.IsEditRestricted == true || _model?.IsMusicPlaying == true)
 			{
 				return;
 			}
+			if (data.SelectedNoteIdList.Count == 0 && data.SelectedEventIdList.Count == 0) return;
+			bool isCut = evt?.IsCut == true;
+			// Deleting a long-note endpoint can remove its entire chain. Never cut a
+			// partial chain or a temporary selection that has not been copied.
+			if (isCut && (data.SelectedTemporaryNoteIdList.Count > 0 || data.SelectedTemporaryEventIdList.Count > 0
+				|| data.SelectedNoteIdList.Count > 0 && !MusicScoreMakerUtility.CanCopySelectedNotes(data.SelectedNoteIdList, data.GetNoteIdCacheOrRebuild()))) return;
 			data.CopiedNoteList ??= new List<MusicScoreNoteBase>();
 			data.CopiedEventDataList ??= new List<MusicScoreEventData>();
+			data.CopiedArtGroups ??= new List<ArtGroupData>();
 			data.CopiedNoteList.Clear();
 			data.CopiedEventDataList.Clear();
+			data.CopiedArtGroups.Clear();
 			List<int> selectedNoteIds = data.SelectedNoteIdList;
+			HashSet<string> completeArtGroupIds = new HashSet<string>();
+			foreach (ArtGroupData group in data.ArtGroups ?? new List<ArtGroupData>())
+			{
+				List<int> noteIds = GetArtGroupNoteIds(data, group?.Id);
+				if (noteIds.Count > 0 && noteIds.TrueForAll(selectedNoteIds.Contains))
+				{
+					completeArtGroupIds.Add(group.Id);
+					data.CopiedArtGroups.Add(group.Clone());
+				}
+			}
 			foreach (int id in selectedNoteIds)
 			{
 				MusicScoreNoteBase note = data.FindNote(id);
-				if (note != null && CanCopyConnectedNote(note, selectedNoteIds))
+				bool isPartialArtCopy = note != null && !string.IsNullOrEmpty(note.ArtGroupId) && !completeArtGroupIds.Contains(note.ArtGroupId);
+				if (note != null && (CanCopyConnectedNote(note, selectedNoteIds) || isPartialArtCopy))
 				{
-					data.CopiedNoteList.Add(note.Clone());
+					MusicScoreNoteBase clone = note.Clone();
+					if (isPartialArtCopy)
+					{
+						clone.ArtGroupId = null;
+						clone.previousConnectionId = -1;
+						clone.nextConnectionId = -1;
+						clone.category = NoteCategory.Guide;
+						clone.noteBaseType = MusicScoreNoteBase.NoteBaseType.Guide;
+					}
+					data.CopiedNoteList.Add(clone);
 				}
 			}
 			Dictionary<int, MusicScoreEventData> eventCache = data.GetEventIdCacheOrRebuild();
@@ -5796,7 +6244,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 			if (data.CopiedNoteList.Count > 0 || data.CopiedEventDataList.Count > 0)
 			{
-				ClipboardCacheManager.Instance.AddCache(new ClipboardCacheData(data.CopiedNoteList, data.CopiedEventDataList));
+				ClipboardCacheManager.Instance.AddCache(new ClipboardCacheData(data.CopiedNoteList, data.CopiedEventDataList, data.CopiedArtGroups));
+				if (isCut) RemoveSelectedAndTemporaryNotesAndEventList();
 				if (MusicScoreMakerEventDispatcher.ExistsInstance)
 				{
 					MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateClipboardButtonEvent());
@@ -5830,6 +6279,17 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 		}
 
+		private void PasteCopiedNotesAndEvents(PasteCopiedNotesAndEventsEvent evt)
+		{
+			if (_model?.IsEditRestricted == true || _model?.IsMusicPlaying == true) return;
+			ClipboardCacheData cache = ClipboardCacheManager.Instance.GetLatestCache();
+			if (cache == null) return;
+			CancelScrollInertia();
+			long snappedFocusTicks = MusicScoreMakerUtility.CalculateSnapQuantizedTicks(0L, MusicScoreMakerUtility.GetFocusTicks());
+			MusicScoreMakerUtility.SetFocusTicks(snappedFocusTicks);
+			PasteNotesAndEvents(cache.CopiedNoteList, cache.CopiedEventDataList, false, cache.ArtGroups);
+		}
+
 		private void PasteFromClipboardCache(PasteFromClipboardCacheEvent evt)
 		{
 			if (_model?.IsEditRestricted == true)
@@ -5842,10 +6302,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				UnityEngine.Debug.LogError($"Clipboard cache not found: {evt?.CacheId}");
 				return;
 			}
-			PasteNotesAndEvents(cache.CopiedNoteList, cache.CopiedEventDataList, evt.IsFlipHorizontal);
+			PasteNotesAndEvents(cache.CopiedNoteList, cache.CopiedEventDataList, evt.IsFlipHorizontal, cache.ArtGroups);
 		}
 
-		private void PasteNotesAndEvents(List<MusicScoreNoteBase> sourceNotes, List<MusicScoreEventData> sourceEvents, bool isFlipHorizontal)
+		private void PasteNotesAndEvents(List<MusicScoreNoteBase> sourceNotes, List<MusicScoreEventData> sourceEvents, bool isFlipHorizontal, List<ArtGroupData> sourceArtGroups = null)
 		{
 			MusicScoreMakerData data = CurrentData();
 			if (data == null || _model?.IsEditRestricted == true)
@@ -5870,6 +6330,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			_pasteNoteListCache.Clear();
 			_pasteIdMappingCache.Clear();
 			_pasteEventListCache.Clear();
+			Dictionary<string, string> artGroupIdMap = new Dictionary<string, string>();
+			List<ArtGroupData> pastedArtGroups = new List<ArtGroupData>();
+			if (sourceArtGroups != null)
+			{
+				foreach (ArtGroupData sourceGroup in sourceArtGroups)
+				{
+					if (sourceGroup == null || string.IsNullOrEmpty(sourceGroup.Id)) continue;
+					string newId = Guid.NewGuid().ToString("N");
+					artGroupIdMap[sourceGroup.Id] = newId;
+					pastedArtGroups.Add(sourceGroup.Clone(newId));
+				}
+			}
 			if (sourceNotes != null)
 			{
 				foreach (MusicScoreNoteBase source in sourceNotes)
@@ -5883,6 +6355,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 					clone.id = data.GetNewId();
 					_pasteIdMappingCache[oldId] = clone.id;
 					clone.ticks = ClampTicksToValidRange(source.ticks - minTicks + focusTicks);
+					clone.ArtGroupId = !string.IsNullOrEmpty(source.ArtGroupId) && artGroupIdMap.TryGetValue(source.ArtGroupId, out string mappedGroupId) ? mappedGroupId : null;
 					if (isFlipHorizontal)
 					{
 						FlipNoteLanePosition(clone);
@@ -5934,6 +6407,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			long minPastedTicks = FindMinPastedTicks(pastedNotes, pastedEvents);
 			Action redo = () =>
 			{
+				data.ArtGroups ??= new List<ArtGroupData>();
+				data.ArtGroups.AddRange(pastedArtGroups);
 				data.AddNoteRange(pastedNotes);
 				data.AddEventRange(pastedEvents);
 				data.UpdateConnectionNotes();
@@ -5958,6 +6433,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			};
 			Action undo = () =>
 			{
+				foreach (ArtGroupData group in pastedArtGroups) data.ArtGroups?.RemoveAll(candidate => candidate?.Id == group.Id);
 				data.RemoveNoteRange(pastedNotes);
 				data.RemoveEventRange(pastedEvents);
 				AddEditedTicksAndRecheckForPastedNotes(pastedNotes);
@@ -6069,8 +6545,63 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			return minTicks == long.MaxValue ? -1L : minTicks;
 		}
 
+		private ArtGroupData _artResizeBeforeGroup;
+		private List<MusicScoreNoteBase> _artResizeBeforeNotes;
+
+		private bool UpdateArtResize(PointerEventData pointer, Vector2 press, SelectedTargetOperation.NoteTapPosition side, ArtGroupData group)
+		{
+			if (_artResizeBeforeGroup == null)
+			{
+				_artResizeBeforeGroup = group.Clone();
+				_artResizeBeforeNotes = CurrentData().NoteList.Where(n => n?.ArtGroupId == group.Id).Select(n => n.Clone()).ToList();
+			}
+			if (!TryCreateExpandOperation(pointer, press, side, out var operation)) return false;
+			var source = _artResizeBeforeNotes;
+			float left = source.Min(n => n.GuideLeft), right = source.Max(n => n.GuideRight);
+			long bottom = source.Min(n => n.ticks), top = source.Max(n => n.ticks);
+			if (side == SelectedTargetOperation.NoteTapPosition.left) left = Mathf.Clamp(Mathf.Round(left + operation.deltaLane), 0, right - .05f);
+			if (side == SelectedTargetOperation.NoteTapPosition.right) right = Mathf.Clamp(Mathf.Round(right + operation.deltaLane), left + .05f, 12);
+			if (side == SelectedTargetOperation.NoteTapPosition.bottom) bottom = Math.Max(0, Math.Min(top - 1, (long)Math.Round((bottom + operation.deltaTicks) / (double)CurrentQuantizeTicks) * CurrentQuantizeTicks));
+			if (side == SelectedTargetOperation.NoteTapPosition.top) top = Math.Max(bottom + 1, (long)Math.Round((top + operation.deltaTicks) / (double)CurrentQuantizeTicks) * CurrentQuantizeTicks);
+			var nextGroup = _artResizeBeforeGroup.Clone();
+			var next = ArtGroupTransform.Resize(source, nextGroup, left, right, bottom, top);
+			var data = CurrentData();
+			foreach (var note in next) data.FindNote(note.id)?.SetData(note.GetCurrentNoteOperation());
+			int index = data.ArtGroups.FindIndex(g => g.Id == group.Id);
+			if (index >= 0) data.ArtGroups[index] = nextGroup;
+			data.MarkNoteListOrderDirty();
+			data.UpdateConnectionNotes();
+			NotifyMusicScoreAndTimelineChanged(refresh: true);
+			return true;
+		}
+
+		private void FinishArtResize(bool commit)
+		{
+			if (_artResizeBeforeGroup == null) return;
+			var data = CurrentData();
+			string id = _artResizeBeforeGroup.Id;
+			var afterGroup = data.ArtGroups.Find(g => g.Id == id)?.Clone();
+			var afterNotes = data.NoteList.Where(n => n?.ArtGroupId == id).Select(n => n.Clone()).ToList();
+			foreach (var note in _artResizeBeforeNotes) data.FindNote(note.id)?.SetData(note.GetCurrentNoteOperation());
+			int index = data.ArtGroups.FindIndex(g => g.Id == id);
+			if (index >= 0) data.ArtGroups[index] = _artResizeBeforeGroup;
+			data.MarkNoteListOrderDirty();
+			_artResizeBeforeNotes = null;
+			_artResizeBeforeGroup = null;
+			if (commit && afterGroup != null) ReplaceArtGroup(id, afterGroup, afterNotes, true);
+			else NotifyMusicScoreAndTimelineChanged(refresh: true);
+		}
+
 		private void OnExpandInputDrag(OnExpandInputDragEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewDrag(new OnMusicScorePreviewDragEvent
+				{
+					EventData = obj.PointerEventData
+				});
+				return;
+			}
 			MusicScoreMakerData data = CurrentData();
 			if (data == null || obj?.PointerEventData == null)
 			{
@@ -6079,6 +6610,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			CancelScrollInertia();
 			if (_model?.IsEditRestricted == true)
 			{
+				return;
+			}
+			ArtGroupData selectedArtGroup = GetSelectedArtGroup();
+			if (selectedArtGroup != null)
+			{
+				UpdateArtResize(obj.PointerEventData, obj.PressPosition, obj.NoteTapPosition, selectedArtGroup);
 				return;
 			}
 			if (!TryCreateExpandOperation(obj.PointerEventData, obj.PressPosition, obj.NoteTapPosition, out SelectedTargetOperation operation))
@@ -6103,6 +6640,16 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnExpandInputPointerUp(OnExpandInputPointerUpEvent obj)
 		{
+			if (IsDesktopRightButton(obj?.PointerEventData))
+			{
+				OnMusicScorePreviewPointerUp(new OnMusicScorePreviewPointerUpEvent
+				{
+					EventData = obj.PointerEventData,
+					IsDragging = obj.IsDragging,
+					IsLongPress = obj.IsLongPress
+				});
+				return;
+			}
 			MusicScoreMakerData data = CurrentData();
 			if (data == null || obj == null)
 			{
@@ -6110,8 +6657,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			}
 			if (_model?.IsEditRestricted == true)
 			{
+				FinishArtResize(false);
 				ClearExpandOperation(data, obj.NoteTapPosition);
 				UpdateSelectedTargetOperationFromExpandOperations();
+				return;
+			}
+			ArtGroupData selectedArtGroup = GetSelectedArtGroup();
+			if (selectedArtGroup != null)
+			{
+				bool commit = obj.IsDragging && !obj.IsLongPress;
+				if (commit) UpdateArtResize(obj.PointerEventData, obj.PressPosition, obj.NoteTapPosition, selectedArtGroup);
+				FinishArtResize(commit);
+				data.SelectedTargetOperation = null;
+				NotifyMusicScoreAndTimelineChanged();
 				return;
 			}
 
@@ -6146,7 +6704,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				MusicScoreMakerUtility.GetPreviewStartTicks(),
 				MusicScoreMakerUtility.GetPreviewEndTicks(),
 				pointerEventData);
-			int clampedDeltaLane = ClampDeltaLaneForSelectedNotes(deltaLane, noteTapPosition);
+			int clampedDeltaLane = GetSelectedArtGroup() != null ? deltaLane : ClampDeltaLaneForSelectedNotes(deltaLane, noteTapPosition);
 			operation = MusicScoreMakerUtility.CreateSelectedOperation(noteTapPosition, clampedDeltaLane, deltaTicks);
 			return true;
 		}

@@ -216,7 +216,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			_rectTransform ??= GetComponent<RectTransform>();
 			EnsureRaycastControlCanvasGroup();
-			_notePreviewPool = new NotePreviewPool(_notePreviewPrefab, transform, notePoolCount);
+			// Screens can be booted again without destroying their view hierarchy.
+			// Retain ownership of every instance so refresh/reset can still release it.
+			_notePreviewPool ??= new NotePreviewPool(_notePreviewPrefab, transform, notePoolCount);
+			Refresh();
 			_notePreviewPool.SetInteractive(_isInteractiveCache);
 			_longNoteLinesPreview?.Setup(linePoolCount);
 			_longNoteLinesPreview?.EnsureDrawOrderBehindNotes();

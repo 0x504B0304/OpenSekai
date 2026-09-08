@@ -4,6 +4,7 @@ using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace Sekai.MusicScoreMaker.Ingame.Views
 {
@@ -71,6 +72,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private bool _isRightExpandInputDragging;
 
 		private static bool _sIsExpandInputDragging;
+		private ToolInputHandler _expandTopInputHandler;
+		private ToolInputHandler _expandBottomInputHandler;
+		private ToolInputHandler _artMoveHandle;
 
 		private void Awake()
 		{
@@ -93,6 +97,55 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				_moveInputHandler.AddListener(OnMoveInputClick, null, OnMoveInputDrag, OnMoveInputPointerDown, OnMoveInputPointerUp);
 			}
 			SetupEventDispatcher();
+			_expandTopInputHandler = CreateArtHandle("ArtResizeTop", new Vector2(.5f, 1f), true, SelectedTargetOperation.NoteTapPosition.top);
+			_expandBottomInputHandler = CreateArtHandle("ArtResizeBottom", new Vector2(.5f, 0f), true, SelectedTargetOperation.NoteTapPosition.bottom);
+			_artMoveHandle = CreateArtHandle("ArtMoveCenter", new Vector2(.5f, .5f), false, SelectedTargetOperation.NoteTapPosition.center);
+		}
+
+		private ToolInputHandler CreateArtHandle(string name, Vector2 anchor, bool vertical, SelectedTargetOperation.NoteTapPosition position)
+		{
+			if (_expandRightInputHandler == null) return null;
+			var handle = Instantiate(_expandRightInputHandler, transform);
+			handle.name = name;
+			var rect = (RectTransform)handle.transform;
+			rect.anchorMin = rect.anchorMax = anchor;
+			rect.pivot = new Vector2(.5f, .5f);
+			rect.anchoredPosition = Vector2.zero;
+			rect.sizeDelta = new Vector2(48, 48);
+			rect.localRotation = Quaternion.Euler(0, 0, vertical ? 90 : 0);
+			handle.RemoveAllListeners();
+			if (position == SelectedTargetOperation.NoteTapPosition.center)
+			{
+				AddVerticalMoveArrow(handle);
+				handle.AddListener(null, null, OnMoveInputDrag, OnMoveInputPointerDown, OnMoveInputPointerUp);
+			}
+			else
+			{
+				Vector2 press = default;
+				handle.AddListener(null, null, e =>
+				{
+					_sIsExpandInputDragging = true;
+					MusicScoreMakerEventDispatcher.Instance.Publish(new OnExpandInputDragEvent { NoteTapPosition = position, PointerEventData = e, PressPosition = press });
+				}, e => press = e.position, (e, longPress, dragging) =>
+				{
+					_sIsExpandInputDragging = false;
+					MusicScoreMakerEventDispatcher.Instance.Publish(new OnExpandInputPointerUpEvent { NoteTapPosition = position, PointerEventData = e, PressPosition = press, IsDragging = dragging, IsLongPress = longPress });
+				});
+			}
+			handle.gameObject.SetActive(false);
+			return handle;
+		}
+
+		private static void AddVerticalMoveArrow(ToolInputHandler handle)
+		{
+			Transform horizontalArrow = handle != null ? handle.transform.Find("IconImage (1)") : null;
+			if (horizontalArrow == null || horizontalArrow.parent.Find("VerticalMoveArrow") != null) return;
+			GameObject verticalArrow = Instantiate(horizontalArrow.gameObject, horizontalArrow.parent);
+			verticalArrow.name = "VerticalMoveArrow";
+			verticalArrow.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+			verticalArrow.transform.SetAsLastSibling();
+			Graphic graphic = verticalArrow.GetComponent<Graphic>();
+			if (graphic != null) graphic.raycastTarget = false;
 		}
 
 		private void OnDestroy()
@@ -168,6 +221,22 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_selectAllConnectedNotesButton.SetActive(eventData.isSelectAllConnectedNotes);
 			_expandLeftInputHandler.SetActive(eventData.isLeftExpand);
 			_expandRightInputHandler.SetActive(eventData.isRightExpand);
+			var data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+			string groupId = null;
+			bool wholeGroup = data?.SelectedNoteIdList?.Count > 1;
+			if (wholeGroup)
+			{
+				foreach (int id in data.SelectedNoteIdList)
+				{
+					var note = data.FindNote(id);
+					if (string.IsNullOrEmpty(note?.ArtGroupId) || groupId != null && groupId != note.ArtGroupId) { wholeGroup = false; break; }
+					groupId = note.ArtGroupId;
+				}
+				if (wholeGroup) wholeGroup = data.NoteList.FindAll(n => n?.ArtGroupId == groupId).Count == data.SelectedNoteIdList.Count;
+			}
+			_expandTopInputHandler?.gameObject.SetActive(wholeGroup);
+			_expandBottomInputHandler?.gameObject.SetActive(wholeGroup);
+			_artMoveHandle?.gameObject.SetActive(wholeGroup);
 			gameObject.SetActive(eventData.isShow);
 			if (!_isInitialPositionSet && _buttonsContainer != null)
 			{
@@ -187,6 +256,28 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 					NoteId = data.SelectedNoteIdList[0],
 					PointerEventData = eventData
 				});
+			}
+			else if (data?.SelectedNoteIdList != null && data.SelectedNoteIdList.Count > 1 && eventData != null)
+			{
+				string artGroupId = null;
+				foreach (int selectedId in data.SelectedNoteIdList)
+				{
+					MusicScoreNoteBase selectedNote = data.FindNote(selectedId);
+					if (selectedNote == null || string.IsNullOrEmpty(selectedNote.ArtGroupId) || artGroupId != null && artGroupId != selectedNote.ArtGroupId) return;
+					artGroupId = selectedNote.ArtGroupId;
+				}
+				foreach (NotePreview preview in FindObjectsByType<NotePreview>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+				{
+					if (preview == null || !data.SelectedNoteIdList.Contains(preview.NoteId)) continue;
+					RectTransform rect = preview.transform as RectTransform;
+					if (rect == null || !RectTransformUtility.RectangleContainsScreenPoint(rect, eventData.position, eventData.pressEventCamera)) continue;
+					MusicScoreMakerEventDispatcher.Instance.Publish(new OnNotePreviewClickEvent
+					{
+						NoteId = preview.NoteId,
+						PointerEventData = eventData
+					});
+					break;
+				}
 			}
 		}
 

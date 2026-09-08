@@ -115,7 +115,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				return;
 			}
-			_materialInstance = new Material(_minimapMaterial);
+			if (_materialInstance == null) _materialInstance = new Material(_minimapMaterial);
 			_rawImage.material = _materialInstance;
 			CreateViewportFrame();
 			MusicScoreMakerEventDispatcher.Instance.Register<InvalidateMaxFocusableTicksCacheEvent>(OnMaxTicksCacheInvalidated);
@@ -596,7 +596,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private void CreateViewportFrame()
 		{
-			if (_viewportFrameSprite == null || _rawImage == null)
+			if (_viewportFrameImage != null || _viewportFrameSprite == null || _rawImage == null)
 			{
 				return;
 			}

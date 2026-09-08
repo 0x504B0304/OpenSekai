@@ -70,6 +70,25 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		[Key(12)]
 		public bool isSkip;
 
+		[Key(13)]
+		public string ArtGroupId;
+
+		// Sub-lane offsets keep ordinary notes on their original integer grid.
+		[Key(14)] public float GuideStartOffset;
+		[Key(15)] public float GuideEndOffset;
+		[JsonIgnore, IgnoreMember] public float GuideLeft => laneStart + GuideStartOffset;
+		[JsonIgnore, IgnoreMember] public float GuideRight => laneEnd + 1f + GuideEndOffset;
+
+		public void SetGuideBounds(float left, float right)
+		{
+			left = UnityEngine.Mathf.Clamp(left, 0f, 11.99f);
+			right = UnityEngine.Mathf.Clamp(right, left + 0.001f, 12f);
+			laneStart = UnityEngine.Mathf.Clamp(UnityEngine.Mathf.FloorToInt(left), 0, 11);
+			laneEnd = UnityEngine.Mathf.Clamp(UnityEngine.Mathf.CeilToInt(right) - 1, laneStart, 11);
+			GuideStartOffset = left - laneStart;
+			GuideEndOffset = right - laneEnd - 1f;
+		}
+
 		[JsonIgnore]
 		[IgnoreMember]
 		[field: NonSerialized]
@@ -198,15 +217,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			return new MusicScoreNoteBase(
 				newId(),
 				ticks,
-				noteBase.LaneStart,
-				noteBase.LaneEnd,
+				noteBase.DefaultLeftLane,
+				noteBase.DefaultRightLane,
 				noteCategory,
 				noteBase.Type,
 				noteBase.speedRatio,
 				noteBase.LineType,
 				baseType,
 				noteBase.IsSkip,
-				noteBase.Direction);
+				noteBase.Direction) { GuideStartOffset = noteBase.GuideStartOffset, GuideEndOffset = noteBase.GuideEndOffset };
 		}
 
 		public NoteBase ToNoteBase(LiveBundleBuildData bundleBuildData, List<MusicScoreNoteBase> noteArray, MusicScoreInfo[] musicScoreInfos, MusicScoreMakerData musicScoreMakerData)
@@ -303,6 +322,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				break;
 			case NoteBaseType.GuideHiddenConnection:
 				note = new GuideHiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, bundleBuildData, noteBase.type, noteBase.speedRatio, noteBase.noteLineType);
+				ApplyGuideGeometry(noteBase, note);
 				note.SetSkip(noteBase.isSkip);
 				longNote?.AddConnectionNote(note);
 				return note;
@@ -310,8 +330,17 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				throw new ArgumentOutOfRangeException(nameof(noteBase.noteBaseType), noteBase.noteBaseType, null);
 			}
 			note.SetSkip(noteBase.isSkip);
+			ApplyGuideGeometry(noteBase, note);
 			SetParent(longNote, note);
 			return note;
+		}
+
+		private static void ApplyGuideGeometry(MusicScoreNoteBase source, NoteBase target)
+		{
+			target.GuideStartOffset = source.GuideStartOffset;
+			target.GuideEndOffset = source.GuideEndOffset;
+			target.LaneStartF = source.GuideLeft;
+			target.LaneEndF = source.GuideRight - 1f;
 		}
 
 		private static void SetParent(LongNote longNote, NoteBase note)
@@ -326,7 +355,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 		public NoteOperation GetCurrentNoteOperation()
 		{
-			return new NoteOperation(id, laneStart, laneEnd, ticks);
+			return new NoteOperation(id, laneStart, laneEnd, ticks, GuideStartOffset, GuideEndOffset);
 		}
 
 		public NoteOperation CalcMoveOperation(SelectedTargetOperation selectedTargetOperation, MusicScoreMakerData MusicScoreMakerData)
@@ -357,11 +386,13 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			default:
 				throw new ArgumentOutOfRangeException();
 			}
-			return new NoteOperation(id, startLane, endLane, ticks);
+			return new NoteOperation(id, startLane, endLane, ticks, GuideStartOffset, GuideEndOffset);
 		}
 
 		public void SetData(NoteOperation noteData)
 		{
+			if (noteData.GuideStartOffset.HasValue) GuideStartOffset = noteData.GuideStartOffset.Value;
+			if (noteData.GuideEndOffset.HasValue) GuideEndOffset = noteData.GuideEndOffset.Value;
 			id = noteData.Id;
 			laneStart = noteData.StartLane;
 			laneEnd = noteData.EndLane;
@@ -478,6 +509,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				nextConnectionId = nextConnectionId,
 				direction = direction,
 				isSkip = isSkip,
+				ArtGroupId = ArtGroupId,
+				GuideStartOffset = GuideStartOffset,
+				GuideEndOffset = GuideEndOffset,
 				ConnectedNotes = new List<MusicScoreNoteBase>(ConnectedNotes)
 			};
 		}

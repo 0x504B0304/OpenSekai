@@ -85,6 +85,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Utilities
 			return null;
 		}
 
+		public ClipboardCacheData GetLatestCache()
+		{
+			// Storage preserves insertion order, including copies made in the same second.
+			return _caches.Count > 0 ? _caches[_caches.Count - 1] : null;
+		}
+
 		public IReadOnlyList<ClipboardCacheData> GetAllCaches()
 		{
 			_sortedCachesCache.Clear();

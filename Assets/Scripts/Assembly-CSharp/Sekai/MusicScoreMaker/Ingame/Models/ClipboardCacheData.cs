@@ -46,15 +46,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			set;
 		}
 
+		[Key(4)]
+		public List<ArtGroupData> ArtGroups { get; set; }
+
 		public ClipboardCacheData()
 		{
 			Id = Guid.NewGuid().ToString();
 			CopiedNoteList = new List<MusicScoreNoteBase>();
 			CopiedEventDataList = new List<MusicScoreEventData>();
+			ArtGroups = new List<ArtGroupData>();
 			CreatedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
 		}
 
-		public ClipboardCacheData(List<MusicScoreNoteBase> copiedNoteList, List<MusicScoreEventData> copiedEventDataList)
+		public ClipboardCacheData(List<MusicScoreNoteBase> copiedNoteList, List<MusicScoreEventData> copiedEventDataList, List<ArtGroupData> artGroups = null)
 		{
 			if (copiedNoteList == null)
 			{
@@ -68,6 +72,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			Id = Guid.NewGuid().ToString();
 			CopiedNoteList = copiedNoteList.Select(note => note.Clone()).ToList();
 			CopiedEventDataList = copiedEventDataList.Select(eventData => eventData.Clone()).ToList();
+			ArtGroups = artGroups?.Select(group => group.Clone()).ToList() ?? new List<ArtGroupData>();
 			CreatedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
 		}
 	}

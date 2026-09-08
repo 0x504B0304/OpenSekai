@@ -126,6 +126,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			int baseMusicDifficultyId = bootArg?.baseMusicDifficultyId ?? -1;
 			MusicScoreMakerModel model = new MusicScoreMakerModel(baseMusicScoreId, baseMusicDifficultyId);
 			_presenter = await MusicScoreMakerPresenter.Create(model, _MusicScoreMakerView, token, bootArg?.FinishTransitionCallback);
+			_MusicScoreMakerView?.SetupArtTools(_presenter);
 
 			if (bootArg != null)
 			{
