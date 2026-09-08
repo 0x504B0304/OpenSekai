@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -60,7 +61,8 @@ namespace Sekai.CustomMusicScoreManager
 			string scoreTitle,
 			DateTime timestamp,
 			Action<string> onComplete = null,
-			Action<string> onError = null)
+			Action<string> onError = null,
+			Action<float> onProgress = null)
 		{
 			if (string.IsNullOrEmpty(sourcePath))
 			{
@@ -81,7 +83,7 @@ namespace Sekai.CustomMusicScoreManager
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
 			SaveVideoOnWindows(sourcePath, scoreTitle, timestamp, onComplete, onError);
 #elif UNITY_ANDROID && !UNITY_EDITOR
-			SaveVideoOnAndroid(sourcePath, scoreTitle, timestamp, onComplete, onError);
+			VideoPostProcessor.Instance.StartCoroutine(SaveVideoOnAndroid(sourcePath, scoreTitle, timestamp, onComplete, onError, onProgress));
 #else
 			// 其他平台的备用方案：保存到应用持久化目录
 			SaveVideoToPersistentPath(sourcePath, scoreTitle, timestamp, onComplete, onError);
@@ -203,41 +205,58 @@ namespace Sekai.CustomMusicScoreManager
 		/// <param name="timestamp">时间戳</param>
 		/// <param name="onComplete">完成回调</param>
 		/// <param name="onError">错误回调</param>
-		private void SaveVideoOnAndroid(
+		private IEnumerator SaveVideoOnAndroid(
 			string sourcePath,
 			string scoreTitle,
 			DateTime timestamp,
 			Action<string> onComplete,
-			Action<string> onError)
+			Action<string> onError,
+			Action<float> onProgress)
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			bool answered = false, granted = false;
+			global::CustomMusicScoreManager.Helpers.PermissionHelper.RequestGalleryPermission(allowed => { granted = allowed; answered = true; });
+			while (!answered) yield return null;
+			if (!granted)
+			{
+				onError?.Invoke("未授予存储权限。视频已保留，请允许存储权限后重试保存。");
+				yield break;
+			}
+#endif
+			AndroidJavaObject job = null;
+			string error = null, savedUri = null;
+			try { job = new AndroidJavaObject("com.opensekai.VideoGalleryJob", sourcePath, GenerateFileName(scoreTitle, timestamp), ALBUM_NAME); }
+			catch (Exception ex) { error = ex.Message; }
 			try
 			{
-				// 生成文件名
-				string fileName = GenerateFileName(scoreTitle, timestamp);
-
-				// 调用Java层的ShareExportHelper.saveVideoToGallery方法
-				using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
-				using (AndroidJavaObject activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
-				using (AndroidJavaClass helperClass = new AndroidJavaClass("com.opensekai.ShareExportHelper"))
+				while (job != null)
 				{
-					// 调用静态方法: saveVideoToGallery(String sourcePath, String filename, String albumName)
-					helperClass.CallStatic("saveVideoToGallery", sourcePath, fileName, ALBUM_NAME);
-
-					// 由于Java方法是异步的，我们需要等待回调
-					// 这里暂时返回一个路径标识
-					string savedPath = $"content://media/external/video/media/{fileName}";
-					Debug.Log($"[VideoSaveHelper] 视频已保存到Android相册: {ALBUM_NAME}/{fileName}");
-
-					onComplete?.Invoke(savedPath);
+					bool finished = false;
+					try
+					{
+						finished = job.Call<bool>("isDone");
+						onProgress?.Invoke(job.Call<float>("getProgress"));
+						if (finished) { savedUri = job.Call<string>("getUri"); error = job.Call<string>("getError"); }
+					}
+					catch (Exception ex) { error = ex.Message; finished = true; }
+					if (finished) break;
+					yield return new WaitForSecondsRealtime(0.1f);
 				}
 			}
-			catch (Exception ex)
+			finally
 			{
-				string error = $"Android保存视频失败: {ex.Message}";
-				Debug.LogError($"[VideoSaveHelper] {error}\n{ex.StackTrace}");
-				onError?.Invoke(error);
+				if (job != null)
+				{
+					try { if (!job.Call<bool>("isDone")) job.Call("cancel"); }
+					finally { job.Dispose(); }
+				}
 			}
+			if (string.IsNullOrEmpty(error) && IsContentUri(savedUri)) onComplete?.Invoke(savedUri);
+			else onError?.Invoke("保存到相册失败，原视频已保留：" + (error ?? "未返回有效的视频地址。"));
 		}
+
+		public static bool IsContentUri(string value) =>
+			Uri.TryCreate(value, UriKind.Absolute, out Uri uri) && uri.Scheme == "content" && !string.IsNullOrEmpty(uri.Host);
 
 		#endregion
 

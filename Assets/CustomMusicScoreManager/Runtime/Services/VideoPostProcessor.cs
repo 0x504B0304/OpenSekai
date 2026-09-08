@@ -9,7 +9,7 @@ namespace Sekai.CustomMusicScoreManager
 	/// <summary>
 	/// 视频后处理器
 	/// 负责将录制的帧序列转换为最终的视频文件
-	/// 使用跨平台原生编码器，无需外部FFmpeg依赖
+	/// Windows 使用 FFmpeg，Android 使用原生编码器。
 	/// </summary>
 	public class VideoPostProcessor : MonoBehaviour
 	{
@@ -277,15 +277,15 @@ namespace Sekai.CustomMusicScoreManager
 				return;
 			}
 
-			if (_processingCoroutine != null)
-			{
-				StopCoroutine(_processingCoroutine);
-				_processingCoroutine = null;
-			}
+			// Nested StartCoroutine calls outlive their parent unless explicitly stopped.
+			// Stale callbacks must not interrupt a later retry.
+			StopAllCoroutines();
+			_processingCoroutine = null;
 
 			if (currentEncoder != null)
 			{
 				currentEncoder.CancelEncoding();
+				currentEncoder.StopAllCoroutines();
 			}
 
 			IsProcessing = false;
@@ -322,7 +322,7 @@ namespace Sekai.CustomMusicScoreManager
 			string fileName = VideoGenerationController.Instance.GetSuggestedOutputFileName();
 			string directory = Path.Combine(Application.temporaryCachePath, "VideoOutput");
 			Directory.CreateDirectory(directory);
-			return Path.Combine(directory, $"{fileName}.mp4");
+			return Path.Combine(directory, $"{fileName}_{Guid.NewGuid():N}.mp4");
 		}
 
 		#endregion
@@ -357,7 +357,7 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			IsProcessing = true;
 			Progress = 0f;
-			float startTime = Time.time;
+			float startTime = Time.realtimeSinceStartup;
 
 			// Step 1: 解析帧序列信息 (10%)
 			UpdateProgress(0.05f, "解析帧序列信息...");
@@ -391,7 +391,8 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (!audioValid && !string.IsNullOrEmpty(audioPath))
 			{
-				Debug.LogWarning($"[VideoPostProcessor] 音频文件无效或不存在: {audioPath}");
+				HandleError("录制音频无法读取，已停止导出，避免生成无声视频。");
+				yield break;
 			}
 
 			UpdateProgress(0.15f, $"音频验证完成: {(audioValid ? $"{audioDuration:F2}秒" : "无音频")}");
@@ -446,7 +447,12 @@ namespace Sekai.CustomMusicScoreManager
 
 			// 验证编码是否成功
 			bool encodeSuccess = File.Exists(outputPath);
-			if (!encodeSuccess)
+			if (currentEncoder is AndroidVideoEncoder android && !android.LastEncodingSucceeded)
+			{
+				HandleError(android.LastError ?? "Android 视频编码失败");
+				yield break;
+			}
+			if (!encodeSuccess || (currentEncoder is WindowsVideoEncoder windows && !windows.LastEncodingSucceeded))
 			{
 				HandleError("视频编码失败");
 				yield break;
@@ -461,7 +467,7 @@ namespace Sekai.CustomMusicScoreManager
 				CleanupIntermediateFiles(processedFramePath, frameInfo.DirectoryPath);
 			}
 
-			float totalTime = Time.time - startTime;
+			float totalTime = Time.realtimeSinceStartup - startTime;
 			UpdateProgress(1f, $"处理完成，耗时: {totalTime:F1}秒");
 
 			// 验证输出文件
@@ -566,14 +572,18 @@ namespace Sekai.CustomMusicScoreManager
 			FrameSequenceInfo frameInfo,
 			Action<bool, string> onComplete)
 		{
+			// Real-time recordings already have consecutive frames. Avoid duplicating an
+			// entire song's JPEGs (especially costly on mobile storage).
+			if (frameInfo.SpeedMultiplier == 1)
+			{
+				onComplete?.Invoke(true, frameInfo.DirectoryPath);
+				yield break;
+			}
 			// 创建临时目录存放处理后的帧
 			_currentTempDirectory = Path.Combine(Application.temporaryCachePath, "VideoProcessing", Guid.NewGuid().ToString("N"));
 			Directory.CreateDirectory(_currentTempDirectory);
 
-			// 对于3倍速恢复到1倍速，有两种方案：
-			// 方案1：保持原始帧率，使用FFmpeg的setpts滤镜调整速度
-			// 方案2：调整帧率，将30fps变为10fps
-			// 我们采用方案1，保持帧率，通过FFmpeg调整速度
+			// 保留旧调用的临时副本流程；当前录制只使用正常速度。
 
 			// 复制manifest.json文件（如果存在）
 			string sourceManifestPath = Path.Combine(frameInfo.DirectoryPath, "manifest.json");
@@ -630,8 +640,24 @@ namespace Sekai.CustomMusicScoreManager
 				yield break;
 			}
 
+			if (Application.platform == RuntimePlatform.Android)
+			{
+				// Validate RIFF/PCM without loading an entire song into a Unity AudioClip.
+				bool valid = false;
+				float duration = 0;
+				try
+				{
+					using (var helper = new AndroidJavaClass("com.opensekai.VideoEncoderJob"))
+						duration = (float)helper.CallStatic<double>("getPcmDuration", audioPath);
+					valid = duration > 0;
+				}
+				catch (Exception ex) { Debug.LogWarning("音频校验失败：" + ex.Message); }
+				onComplete?.Invoke(valid, duration);
+				yield break;
+			}
+
 			// 使用Unity的AudioClip获取音频时长
-			string uri = "file:///" + audioPath.Replace("\\", "/");
+			string uri = new Uri(Path.GetFullPath(audioPath)).AbsoluteUri;
 			using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.UNKNOWN))
 			{
 				yield return request.SendWebRequest();

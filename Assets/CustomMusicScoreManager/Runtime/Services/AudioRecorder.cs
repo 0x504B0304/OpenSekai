@@ -1,212 +1,242 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading;
+using CriWare;
 using UnityEngine;
 
 namespace Sekai.CustomMusicScoreManager
 {
-	/// <summary>
-	/// 录制AudioListener输出的音频（游戏音效）
-	/// 使用OnAudioFilterRead捕获音频数据并保存为WAV文件
-	/// </summary>
-	[RequireComponent(typeof(AudioListener))]
-	public class AudioRecorder : MonoBehaviour
+	// CRI renders music and hit sounds outside Unity's AudioListener.
+	public sealed class AudioRecorder : MonoBehaviour
 	{
-		#region Public Properties
-
 		public bool IsRecording { get; private set; }
-		public int SampleRate { get; private set; } = 48000;
-		public int Channels { get; private set; } = 2;
-		public float RecordingDuration => _recordedSamples.Count / (float)(SampleRate * Channels);
+		public int SampleRate => 48000; // SoundManager's CRI output rate.
+		public int Channels => 2;
+		public float RecordingDuration => sampleFrames / (float)SampleRate;
+		public float PeakAmplitude { get; private set; }
+		private CaptureBuffer capture;
+		private static CaptureBuffer activeCapture;
+		private static readonly BusFilterCallback busCallback = CaptureBus;
+		private BinaryWriter writer;
+		private string outputPath;
+		private int sampleFrames;
+		private readonly byte[] pcm = new byte[4096 * 4];
 
-		#endregion
+		[UnmanagedFunctionPointer(Common.pluginCallingConvention)]
+		private delegate void BusFilterCallback(IntPtr context, int format, int channels, int count, IntPtr data);
 
-		#region Private Fields
+		[DllImport(Common.pluginName, CallingConvention = Common.pluginCallingConvention)]
+		private static extern void criAtomExAsr_SetBusFilterCallbackByName(string busName,
+			BusFilterCallback before, BusFilterCallback after, IntPtr context);
 
-		private List<float> _recordedSamples = new List<float>();
-		private string _outputPath;
-		private bool _isInitialized = false;
-
-		#endregion
-
-		#region Public Methods
-
-		/// <summary>
-		/// 开始录制音频
-		/// </summary>
-		/// <param name="outputPath">输出WAV文件路径</param>
-		public void StartRecording(string outputPath)
+		// Single producer (CRI audio thread), single consumer (Unity main thread).
+		// Preallocated storage keeps disk I/O, allocations and render stalls off the audio thread.
+		private sealed class CaptureBuffer
 		{
-			if (IsRecording)
-			{
-				Debug.LogWarning("[AudioRecorder] 已经在录制中");
-				return;
-			}
-
-			_outputPath = outputPath;
-			_recordedSamples.Clear();
-			IsRecording = true;
-
-			// 获取系统音频设置
-			SampleRate = AudioSettings.outputSampleRate;
-			Channels = 2; // 立体声
-
-			Debug.Log($"[AudioRecorder] 开始录制音频: {SampleRate}Hz, {Channels}声道, 输出路径: {outputPath}");
+			public const int Capacity = 48000 * 30;
+			public readonly float[] Left = new float[Capacity], Right = new float[Capacity];
+			public readonly short[] IntegerSamples = new short[4096];
+			public readonly float[] MixSamples = new float[4096];
+			public long Written, Read;
+			public string Error;
 		}
 
-		/// <summary>
-		/// 停止录制并保存WAV文件
-		/// </summary>
-		/// <returns>保存的WAV文件路径</returns>
-		public string StopRecording()
+		[AOT.MonoPInvokeCallback(typeof(BusFilterCallback))]
+		private static void CaptureBus(IntPtr context, int format, int channels, int count, IntPtr data)
 		{
-			if (!IsRecording)
-			{
-				Debug.LogWarning("[AudioRecorder] 当前没有在录制");
-				return null;
-			}
-
-			IsRecording = false;
-
-			if (_recordedSamples.Count == 0)
-			{
-				Debug.LogWarning("[AudioRecorder] 没有录制到任何音频数据");
-				return null;
-			}
-
+			CaptureBuffer buffer = Volatile.Read(ref activeCapture);
+			if (buffer == null || buffer.Error != null || count <= 0) return;
 			try
 			{
-				// 保存为WAV文件
-				SaveWavFile(_outputPath, _recordedSamples.ToArray(), SampleRate, Channels);
-				Debug.Log($"[AudioRecorder] 音频已保存: {_outputPath}, 时长: {RecordingDuration:F2}秒, 采样数: {_recordedSamples.Count}");
-				return _outputPath;
+				if ((channels != 1 && channels != 2 && channels != 6 && channels != 8) || (format != 0 && format != 1))
+					throw new InvalidOperationException($"Unsupported CRI output: format={format}, channels={channels}, samples={count}.");
+				long written = buffer.Written;
+				if (written - Volatile.Read(ref buffer.Read) + count > CaptureBuffer.Capacity)
+					throw new InvalidOperationException("Audio capture buffer overflow: recording cannot keep up.");
+				CopyChannel(buffer, Marshal.ReadIntPtr(data), buffer.Left, format, count, written);
+				CopyChannel(buffer, Marshal.ReadIntPtr(data, channels > 1 ? IntPtr.Size : 0), buffer.Right, format, count, written);
+				if (channels >= 6)
+				{
+					// CRI 5.1/7.1 order: L, R, C, LFE, surround L/R, rear L/R.
+					// Standard stereo fold-down; omit the dedicated subwoofer channel.
+					MixChannel(buffer, Marshal.ReadIntPtr(data, 2 * IntPtr.Size), format, count, written, true, true);
+					MixChannel(buffer, Marshal.ReadIntPtr(data, 4 * IntPtr.Size), format, count, written, true, false);
+					MixChannel(buffer, Marshal.ReadIntPtr(data, 5 * IntPtr.Size), format, count, written, false, true);
+					if (channels == 8)
+					{
+						MixChannel(buffer, Marshal.ReadIntPtr(data, 6 * IntPtr.Size), format, count, written, true, false);
+						MixChannel(buffer, Marshal.ReadIntPtr(data, 7 * IntPtr.Size), format, count, written, false, true);
+					}
+				}
+				Volatile.Write(ref buffer.Written, written + count);
 			}
+			catch (Exception ex) { Volatile.Write(ref buffer.Error, ex.Message); }
+		}
+
+		private static void MixChannel(CaptureBuffer buffer, IntPtr source, int format, int count, long written, bool left, bool right)
+		{
+			for (int copied = 0; copied < count;)
+			{
+				int length = Math.Min(count - copied, buffer.MixSamples.Length);
+				if (format == 1) Marshal.Copy(IntPtr.Add(source, copied * 4), buffer.MixSamples, 0, length);
+				else Marshal.Copy(IntPtr.Add(source, copied * 2), buffer.IntegerSamples, 0, length);
+				for (int i = 0; i < length; i++)
+				{
+					float value = (format == 1 ? buffer.MixSamples[i] : buffer.IntegerSamples[i] / 32768f) * 0.70710678f;
+					int index = (int)((written + copied + i) % CaptureBuffer.Capacity);
+					if (left) buffer.Left[index] += value;
+					if (right) buffer.Right[index] += value;
+				}
+				copied += length;
+			}
+		}
+
+		private static void CopyChannel(CaptureBuffer buffer, IntPtr source, float[] target, int format, int count, long written)
+		{
+			int offset = (int)(written % CaptureBuffer.Capacity);
+			if (format == 1) // CRIATOM_PCM_FORMAT_FLOAT32; planar, normalized samples.
+			{
+				int first = Math.Min(count, CaptureBuffer.Capacity - offset);
+				Marshal.Copy(source, target, offset, first);
+				if (first < count) Marshal.Copy(IntPtr.Add(source, first * 4), target, 0, count - first);
+			}
+			else // CRIATOM_PCM_FORMAT_SINT16.
+			{
+				for (int copied = 0; copied < count;)
+				{
+					int length = Math.Min(count - copied, buffer.IntegerSamples.Length);
+					Marshal.Copy(IntPtr.Add(source, copied * 2), buffer.IntegerSamples, 0, length);
+					for (int i = 0; i < length; i++) target[(offset + copied + i) % CaptureBuffer.Capacity] = buffer.IntegerSamples[i] / 32768f;
+					copied += length;
+				}
+			}
+		}
+
+		public void StartRecording(string path)
+		{
+			if (IsRecording) throw new InvalidOperationException("Audio recording is already active.");
+			SoundManager.Instance.Initialize();
+			outputPath = path;
+			sampleFrames = 0;
+			PeakAmplitude = 0;
+			try
+			{
+				Directory.CreateDirectory(Path.GetDirectoryName(path));
+				writer = new BinaryWriter(File.Create(path));
+				WriteHeader();
+				capture = new CaptureBuffer();
+				CriAtomEx.Lock();
+				try
+				{
+					if (activeCapture != null) throw new InvalidOperationException("Another CRI recording is active.");
+					Volatile.Write(ref activeCapture, capture);
+					criAtomExAsr_SetBusFilterCallbackByName("MasterOut", null, busCallback, IntPtr.Zero);
+				}
+				finally { CriAtomEx.Unlock(); }
+				IsRecording = true;
+			}
+			catch { ClearRecording(); throw; }
+		}
+
+		public void Pump()
+		{
+			if (capture == null) return;
+			if (Volatile.Read(ref capture.Error) != null) throw new InvalidOperationException(capture.Error);
+			long written = Volatile.Read(ref capture.Written);
+			while (capture.Read < written)
+			{
+				int count = (int)Math.Min(written - capture.Read, pcm.Length / 4);
+				WriteSamples(capture.Read, count);
+				Volatile.Write(ref capture.Read, capture.Read + count);
+			}
+		}
+
+		private void Update()
+		{
+			if (!IsRecording) return;
+			try { Pump(); }
 			catch (Exception ex)
 			{
-				Debug.LogError($"[AudioRecorder] 保存音频失败: {ex.Message}");
-				return null;
+				VideoGenerationController.Instance.HandleRecordingFailure("音频捕获失败：" + ex.Message);
 			}
 		}
 
-		/// <summary>
-		/// 清除录制的音频数据
-		/// </summary>
+		private void WriteSamples(long start, int count)
+		{
+			for (int i = 0; i < count; i++)
+			{
+				int index = (int)((start + i) % CaptureBuffer.Capacity);
+				float l = Mathf.Clamp(capture.Left[index], -1f, 1f);
+				float r = Mathf.Clamp(capture.Right[index], -1f, 1f);
+				PeakAmplitude = Mathf.Max(PeakAmplitude, Mathf.Abs(l), Mathf.Abs(r));
+				short a = (short)Mathf.RoundToInt(l * 32767f), b = (short)Mathf.RoundToInt(r * 32767f);
+				pcm[i * 4] = (byte)a;
+				pcm[i * 4 + 1] = (byte)(a >> 8);
+				pcm[i * 4 + 2] = (byte)b;
+				pcm[i * 4 + 3] = (byte)(b >> 8);
+			}
+			writer.Write(pcm, 0, count * 4);
+			sampleFrames += count;
+		}
+
+		public string StopRecording()
+		{
+			if (!IsRecording) return null;
+			try
+			{
+				Detach();
+				Pump();
+				IsRecording = false;
+				writer.BaseStream.Position = 0;
+				WriteHeader();
+				Debug.Log($"[AudioRecorder] CRI audio captured: {RecordingDuration:F2}s, peak={PeakAmplitude:F4}");
+				return sampleFrames > 0 ? outputPath : null;
+			}
+			finally { ClearRecording(); }
+		}
+
 		public void ClearRecording()
 		{
-			_recordedSamples.Clear();
 			IsRecording = false;
-		}
-
-		#endregion
-
-		#region Private Methods - Audio Capture
-
-		/// <summary>
-		/// Unity音频过滤器回调 - 捕获AudioListener的输出
-		/// 这个方法会在每个音频帧被调用，捕获最终输出的音频数据
-		/// </summary>
-		void OnAudioFilterRead(float[] data, int channels)
-		{
-			if (!IsRecording)
+			Detach();
+			// A background interruption should still leave a readable partial WAV.
+			if (writer != null)
 			{
-				return;
+				try { Pump(); }
+				catch (Exception ex) { Debug.LogWarning("[AudioRecorder] " + ex.Message); }
+				try { writer.BaseStream.Position = 0; WriteHeader(); }
+				catch (Exception ex) { Debug.LogWarning("[AudioRecorder] " + ex.Message); }
 			}
-
-			// 添加音频数据到录制缓冲区
-			_recordedSamples.AddRange(data);
+			capture = null;
+			writer?.Dispose();
+			writer = null;
 		}
 
-		#endregion
-
-		#region Private Methods - WAV File Saving
-
-		/// <summary>
-		/// 保存音频数据为WAV文件
-		/// WAV格式: RIFF header + fmt chunk + data chunk
-		/// </summary>
-		private void SaveWavFile(string filepath, float[] samples, int sampleRate, int channels)
+		private void Detach()
 		{
-			// 确保目录存在
-			string directory = Path.GetDirectoryName(filepath);
-			if (!Directory.Exists(directory))
+			if (capture == null || !ReferenceEquals(activeCapture, capture)) return;
+			if (!CriAtomPlugin.IsLibraryInitialized()) { Volatile.Write(ref activeCapture, null); return; }
+			CriAtomEx.Lock();
+			try
 			{
-				Directory.CreateDirectory(directory);
+				criAtomExAsr_SetBusFilterCallbackByName("MasterOut", null, null, IntPtr.Zero);
+				Volatile.Write(ref activeCapture, null);
 			}
-
-			using (FileStream fileStream = new FileStream(filepath, FileMode.Create))
-			using (BinaryWriter writer = new BinaryWriter(fileStream))
-			{
-				// 将float样本转换为16位PCM
-				short[] intData = new short[samples.Length];
-				for (int i = 0; i < samples.Length; i++)
-				{
-					// 将[-1, 1]范围的float转换为[-32768, 32767]范围的short
-					intData[i] = (short)(samples[i] * 32767f);
-				}
-
-				byte[] byteData = new byte[intData.Length * 2];
-				Buffer.BlockCopy(intData, 0, byteData, 0, byteData.Length);
-
-				// 写入WAV文件头
-				WriteWavHeader(writer, sampleRate, channels, byteData.Length);
-
-				// 写入音频数据
-				writer.Write(byteData);
-			}
+			finally { CriAtomEx.Unlock(); }
 		}
 
-		/// <summary>
-		/// 写入WAV文件头
-		/// WAV文件格式:
-		/// - RIFF header (12 bytes)
-		/// - fmt chunk (24 bytes)
-		/// - data chunk header (8 bytes)
-		/// </summary>
-		private void WriteWavHeader(BinaryWriter writer, int sampleRate, int channels, int dataLength)
+		private void WriteHeader()
 		{
-			// RIFF header
-			writer.Write("RIFF".ToCharArray()); // ChunkID
-			writer.Write(36 + dataLength); // ChunkSize (文件总大小 - 8)
-			writer.Write("WAVE".ToCharArray()); // Format
-
-			// fmt sub-chunk
-			writer.Write("fmt ".ToCharArray()); // Subchunk1ID
-			writer.Write(16); // Subchunk1Size (PCM格式固定为16)
-			writer.Write((short)1); // AudioFormat (PCM = 1)
-			writer.Write((short)channels); // NumChannels
-			writer.Write(sampleRate); // SampleRate
-			writer.Write(sampleRate * channels * 2); // ByteRate (SampleRate * NumChannels * BitsPerSample/8)
-			writer.Write((short)(channels * 2)); // BlockAlign (NumChannels * BitsPerSample/8)
-			writer.Write((short)16); // BitsPerSample
-
-			// data sub-chunk
-			writer.Write("data".ToCharArray()); // Subchunk2ID
-			writer.Write(dataLength); // Subchunk2Size (音频数据大小)
+			writer.Write(System.Text.Encoding.ASCII.GetBytes("RIFF"));
+			writer.Write(36 + sampleFrames * 4);
+			writer.Write(System.Text.Encoding.ASCII.GetBytes("WAVEfmt "));
+			writer.Write(16); writer.Write((short)1); writer.Write((short)Channels);
+			writer.Write(SampleRate); writer.Write(SampleRate * 4);
+			writer.Write((short)4); writer.Write((short)16);
+			writer.Write(System.Text.Encoding.ASCII.GetBytes("data")); writer.Write(sampleFrames * 4);
 		}
 
-		#endregion
-
-		#region Unity Lifecycle
-
-		void Awake()
-		{
-			// 确保AudioListener存在
-			if (GetComponent<AudioListener>() == null)
-			{
-				Debug.LogError("[AudioRecorder] 需要AudioListener组件");
-			}
-		}
-
-		void OnDestroy()
-		{
-			// 如果还在录制，停止录制
-			if (IsRecording)
-			{
-				Debug.LogWarning("[AudioRecorder] 组件被销毁时仍在录制，停止录制");
-				StopRecording();
-			}
-		}
-
-		#endregion
+		private void OnDestroy() => ClearRecording();
 	}
 }

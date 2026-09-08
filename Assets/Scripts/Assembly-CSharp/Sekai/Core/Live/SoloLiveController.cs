@@ -516,6 +516,7 @@ namespace Sekai.Core.Live
 			else
 			{
 				Debug.LogWarning("[SoloLiveController] Failed to stop video generation recording.");
+				VideoCompletionHandler.Instance.ShowRecordingError("录制失败：未能保存完整的画面和游戏音频，请重新录制。");
 			}
 		}
 

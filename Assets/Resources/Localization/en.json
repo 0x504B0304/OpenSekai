@@ -203,6 +203,7 @@
   "manager.confirm.share_score": "Share this score now?",
   "manager.confirm.calculate_duration": "Calculate and set the score duration automatically?",
   "manager.confirm.generate_video": "Start generating the video?\nPausing is unavailable while it is generated.",
+  "manager.error.ffmpeg_unavailable": "Cannot generate video: no working FFmpeg was found.\nUse the release bundled with FFmpeg, place ffmpeg.exe and its required DLLs beside the application or in its ffmpeg subfolder, or add FFmpeg's bin folder to PATH and restart the application.",
   "manager.dialog.backup_failed": "Backup failed: {0}",
   "manager.dialog.restore_complete": "Restore completed.",
   "manager.dialog.restore_failed": "Restore failed. Check the log for details.",

@@ -203,6 +203,7 @@
   "manager.confirm.share_score": "是否立即分享谱面？",
   "manager.confirm.calculate_duration": "是否自动计算并设置谱面时长？",
   "manager.confirm.generate_video": "是否开始生成视频？\n生成期间不可暂停。",
+  "manager.error.ffmpeg_unavailable": "无法生成视频：未找到可运行的 FFmpeg。\n请使用带 FFmpeg 的发行版，或将 ffmpeg.exe 及所需 DLL 放到程序同目录或 ffmpeg 子目录，也可将 FFmpeg 的 bin 目录加入 PATH 后重新启动程序。",
   "manager.dialog.backup_failed": "备份失败：{0}",
   "manager.dialog.restore_complete": "恢复完成。",
   "manager.dialog.restore_failed": "恢复失败，请查看日志。",

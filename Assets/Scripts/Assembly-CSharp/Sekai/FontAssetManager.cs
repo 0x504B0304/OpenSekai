@@ -41,11 +41,13 @@ namespace Sekai
 
 			_baseFontEB = Resources.Load<TMP_FontAsset>(BaseFontEbPath);
 			ClearFallbackFontAsset(_baseFontEB);
-			_dynamicFontEB = Resources.Load<TMP_FontAsset>(DynamicFontEbPath);
+			_dynamicFontEB = HighQualityDynamicFontProvider.Get(
+				Resources.Load<TMP_FontAsset>(DynamicFontEbPath));
 
 			_baseFontDB = Resources.Load<TMP_FontAsset>(BaseFontDbPath);
 			ClearFallbackFontAsset(_baseFontDB);
-			_dynamicFontDB = Resources.Load<TMP_FontAsset>(DynamicFontDbPath);
+			_dynamicFontDB = HighQualityDynamicFontProvider.Get(
+				Resources.Load<TMP_FontAsset>(DynamicFontDbPath));
 
 			_isInitialized = true;
 		}

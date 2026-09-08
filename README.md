@@ -2,6 +2,8 @@
 
 OpenSekai 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩法复刻项目，目前提供可用的**谱面编辑器**、**第三方歌曲包支持**，以及**从编辑器进入 live 测试游玩**的完整流程。
 
+当前版本：**1.6.17**。发行变更见 [CHANGELOG.md](CHANGELOG.md)。
+
 ## 开发环境
 
 - Unity：`6000.6.0f1`。工程资源已经按此版本序列化，建议使用完全相同的编辑器版本。
@@ -14,6 +16,7 @@ OpenSekai 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩�
 命令行构建入口：
 
 - Windows：`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.BuildWindowsPlayer`
+- Windows 双版本 ZIP：`Sekai.EditorTools.OpenSekaiWindowsReleaseBuild.Build`，构建前将环境变量 `OPENSEKAI_FFMPEG_ROOT` 设为解压后的 FFmpeg 发行目录（包含 `LICENSE` 和 `bin/ffmpeg.exe`）。输出 `Builds/Release/win_amd64.zip`（不含 FFmpeg）及 `Builds/Release/win_amd64_ffmpeg.zip`（包含 FFmpeg、所需 DLL 和许可说明），自动排除调试符号、Unity 调试备份目录和日志。
 - Android：`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.BuildAndroidPlayer`
 
 调用时使用 `<Unity 安装目录>/Editor/Unity.exe -batchmode -quit -projectPath <项目目录> -executeMethod <构建入口>`。构建流程会先生成对应平台的 AssetBundle，再生成 Player；默认输出分别为 `Builds/Windows` 和 `Builds/Android/OpenSekai.apk`。
@@ -22,7 +25,15 @@ OpenSekai 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩�
 
 当前分支合并了 [OpenSekai Community](https://github.com/kamcdev/OpenSekai_Community) 的功能，包括谱面自动保存、预览与音频波形、备份恢复和 Android 分享、自定义 Autoplay 与结算动画、判定线透明度与引导线颜色、谱面时长计算、负流速与单键变速、装饰音符、PC 键鼠操作，以及 Windows/Android 谱面视频生成。
 
-Windows 视频生成需要 `ffmpeg/` 中的 FFmpeg 程序及动态库。发布便携版时应将该目录完整放在主程序同级目录。
+Windows 点击“生成视频”时，会先依次检查主程序目录、`ffmpeg/` 子目录和环境变量 `PATH` 中的 `ffmpeg.exe`，并确认它能启动；不可用时弹窗提示，不会进入录像。无 FFmpeg 版本可自行放入 FFmpeg 及所需 DLL，或将其 `bin` 目录加入 PATH 后重启程序。带 FFmpeg 版本可直接使用，无需配置 PATH。
+
+Windows 录像捕获帧末的完整画面（含谱面、UI 和 MV），声音取自 CRI 主输出。编码窗口在切换场景后仍保留，显示进度；保存完成后显示文件路径，可打开文件位置。录制失败时保留原始帧和音频，便于排查。
+
+Android 使用相同的完整画面和 CRI 声音录制，再由工作线程调用 MediaCodec 编码 H.264/AAC、MediaMuxer 合成 MP4，无需 FFmpeg。开始前检查设备编码能力，生成时显示画面、音频、合并和保存进度。成功后保存到 `Movies/OpenSekai_Rec` 相册，并可直接分享视频；保存失败可重试，原视频会保留。Android 10 及以上写入本程序生成的视频不要求读取相册权限；Android 8/9 需要存储写入权限。请保持应用在前台，切到后台会中断录制或编码；编码中断后可重试生成，录制阶段中断则需重新录制。
+
+## 高 DPI 字体
+
+Windows Player 使用 PerMonitorV2 DPI 感知。Unity 6 下每 250 毫秒检查窗口 DPI 和渲染尺寸，变化稳定 500 毫秒后，从内置 OTF 重新生成动态 SDF 字形并刷新文字；无需重启。字体采样随系统缩放和渲染尺寸在 90–270 点之间调整，采用 2048×2048 多图集。此功能提升文字清晰度，界面布局仍以 1920×1080 为基准缩放。
 
 ## 目录说明
 

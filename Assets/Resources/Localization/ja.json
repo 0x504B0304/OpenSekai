@@ -203,6 +203,7 @@
   "manager.confirm.share_score": "この譜面を今すぐ共有しますか？",
   "manager.confirm.calculate_duration": "譜面の長さを自動計算して設定しますか？",
   "manager.confirm.generate_video": "動画生成を開始しますか？\n生成中は一時停止できません。",
+  "manager.error.ffmpeg_unavailable": "動画を生成できません。実行可能な FFmpeg が見つかりません。\nFFmpeg 同梱版を使用するか、ffmpeg.exe と必要な DLL をアプリと同じフォルダーまたは ffmpeg サブフォルダーに配置してください。FFmpeg の bin フォルダーを PATH に追加した場合は、アプリを再起動してください。",
   "manager.dialog.backup_failed": "バックアップに失敗しました：{0}",
   "manager.dialog.restore_complete": "復元が完了しました。",
   "manager.dialog.restore_failed": "復元に失敗しました。ログを確認してください。",
