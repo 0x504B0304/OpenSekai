@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using Cysharp.Threading.Tasks;
 using Sekai.Live;
+using Sekai.Localization;
 using Sekai.MusicScoreMaker.Common;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Presenters;
@@ -124,6 +125,9 @@ namespace Sekai.CustomMusicScoreManager
 		private Button _scoreSelectButton;
 		private Button _videoSelectButton;
 		private RectTransform _settingsOverlay;
+		private TextMeshProUGUI _languageDropdownLabel;
+		private GameObject _languageDropdownOptions;
+		private LayoutElement _languageSelectorLayout;
 		private TMP_InputField _settingLiveBgmInput;
 		private TMP_InputField _settingLiveSeInput;
 		private TMP_InputField _settingNoteSpeedInput;
@@ -170,6 +174,8 @@ namespace Sekai.CustomMusicScoreManager
 		private IReadOnlyList<CustomMusicScoreManagerItem> _items = Array.Empty<CustomMusicScoreManagerItem>();
 		private CustomMusicScoreManagerItem _selected;
 		private Sprite _jacketSprite;
+		private string _statusLocalizationKey;
+		private object[] _statusLocalizationArguments;
 
 		protected override void Awake()
 		{
@@ -407,6 +413,8 @@ namespace Sekai.CustomMusicScoreManager
 			ContentSizeFitter settingsFitter = settingsContent.gameObject.AddComponent<ContentSizeFitter>();
 			settingsFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
+			CreateSettingLanguageSelector(settingsContent);
+
 			_settingLiveBgmInput = CreateInputField(settingsContent, "音乐音量", "0.0 - 1.0");
 			_settingLiveSeInput = CreateInputField(settingsContent, "音效音量", "0.0 - 1.0");
 			_settingNoteSpeedInput = CreateInputField(settingsContent, "音符流速", "1.0 - 12.0");
@@ -439,12 +447,32 @@ namespace Sekai.CustomMusicScoreManager
 			CreateButton("SaveButton", buttonRow, "保存", SaveSettings, 150f, 52f);
 		}
 
+		private void SetLanguage(string language)
+		{
+			LocalizationManager.SetLanguage(language);
+			RefreshLanguageDropdownLabel();
+			SetLanguageDropdownExpanded(false);
+			foreach (RowView row in _rows)
+			{
+				if (row.Status != null) row.Status.text = row.Item.StatusText;
+			}
+			UpdateSelection(_selected);
+			RefreshLocalizedStatus();
+			SetSettingSimultaneousLine(_settingSimultaneousLineEnabled);
+			SetSettingMusicInfoDisplayMode(_settingMusicInfoDisplayMode);
+			SetSettingLiveBackgroundMode(_settingLiveBackgroundMode);
+			SetSettingFastLateFlick(_settingFastLateFlickEnabled);
+			SetSettingFullscreen(_settingFullscreenEnabled);
+		}
+
 		private void OpenSettings()
 		{
 			ApplicationLocalSettings localSettings = ApplicationLocalSettings.LoadFromStorage();
 			ApplicationLocalSettings.VolumeSettings liveVolume = localSettings.LiveVolume ?? localSettings.SetupLiveVolume();
 			LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
 
+			RefreshLanguageDropdownLabel();
+			SetLanguageDropdownExpanded(false);
 			_settingLiveBgmInput.SetTextWithoutNotify(FormatSettingValue(liveVolume.Bgm));
 			_settingLiveSeInput.SetTextWithoutNotify(FormatSettingValue(liveVolume.Se));
 			_settingNoteSpeedInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.NoteSpeed));
@@ -466,6 +494,7 @@ namespace Sekai.CustomMusicScoreManager
 
 		private void CloseSettings()
 		{
+			SetLanguageDropdownExpanded(false);
 			if (_settingsOverlay != null)
 			{
 				_settingsOverlay.gameObject.SetActive(false);
@@ -542,7 +571,7 @@ namespace Sekai.CustomMusicScoreManager
 			SetSettingFastLateFlick(liveSettingData.IsFastLateFlick);
 			SetSettingFullscreen(localSettings.FullscreenEnabled ?? Screen.fullScreen);
 			CloseSettings();
-			SetStatus("设置已保存。");
+			SetLocalizedStatus("manager.status.settings_saved");
 		}
 
 		private static float ParseClampedSetting(string text, float min, float max, float fallback)
@@ -557,6 +586,91 @@ namespace Sekai.CustomMusicScoreManager
 		private static string FormatSettingValue(float value)
 		{
 			return value.ToString("0.###", CultureInfo.InvariantCulture);
+		}
+
+		private void CreateSettingLanguageSelector(Transform parent)
+		{
+			RectTransform selector = CreateRect("LanguageSelector", parent);
+			_languageSelectorLayout = selector.gameObject.AddComponent<LayoutElement>();
+			_languageSelectorLayout.preferredHeight = 58f;
+			_languageSelectorLayout.minHeight = 58f;
+			VerticalLayoutGroup selectorGroup = selector.gameObject.AddComponent<VerticalLayoutGroup>();
+			selectorGroup.spacing = 4f;
+			selectorGroup.childControlWidth = true;
+			selectorGroup.childControlHeight = true;
+			selectorGroup.childForceExpandWidth = true;
+			selectorGroup.childForceExpandHeight = false;
+
+			RectTransform row = CreateRect("FieldRow", selector);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "语言", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button field = CreateButton("LanguageDropdownButton", row, string.Empty, ToggleLanguageDropdown, 440f, 54f);
+			LayoutElement fieldLayout = field.GetComponent<LayoutElement>();
+			fieldLayout.flexibleWidth = 1f;
+			_languageDropdownLabel = field.GetComponentInChildren<TextMeshProUGUI>();
+			_languageDropdownLabel.alignment = TextAlignmentOptions.Left;
+
+			_languageDropdownOptions = CreateRect("LanguageDropdownOptions", selector).gameObject;
+			LayoutElement optionsLayout = _languageDropdownOptions.AddComponent<LayoutElement>();
+			optionsLayout.preferredHeight = 162f;
+			optionsLayout.minHeight = 162f;
+			VerticalLayoutGroup optionsGroup = _languageDropdownOptions.AddComponent<VerticalLayoutGroup>();
+			optionsGroup.padding = new RectOffset(196, 0, 0, 0);
+			optionsGroup.spacing = 4f;
+			optionsGroup.childControlWidth = true;
+			optionsGroup.childControlHeight = true;
+			optionsGroup.childForceExpandWidth = true;
+			optionsGroup.childForceExpandHeight = false;
+			CreateButton("SimplifiedChinese", _languageDropdownOptions.transform, "简体中文", () => SetLanguage(LocalizationManager.SimplifiedChinese), 440f, 50f);
+			CreateButton("Japanese", _languageDropdownOptions.transform, "日本語", () => SetLanguage(LocalizationManager.Japanese), 440f, 50f);
+			CreateButton("English", _languageDropdownOptions.transform, "English", () => SetLanguage(LocalizationManager.English), 440f, 50f);
+			RefreshLanguageDropdownLabel();
+			SetLanguageDropdownExpanded(false);
+		}
+
+		private void ToggleLanguageDropdown()
+		{
+			SetLanguageDropdownExpanded(_languageDropdownOptions != null && !_languageDropdownOptions.activeSelf);
+		}
+
+		private void SetLanguageDropdownExpanded(bool expanded)
+		{
+			SetLanguageDropdownExpanded(_languageDropdownOptions, _languageSelectorLayout, expanded);
+		}
+
+		private static void SetLanguageDropdownExpanded(GameObject options, LayoutElement selectorLayout, bool expanded)
+		{
+			if (options != null) options.SetActive(expanded);
+			if (selectorLayout != null) selectorLayout.preferredHeight = expanded ? 224f : 58f;
+		}
+
+		private void RefreshLanguageDropdownLabel()
+		{
+			if (_languageDropdownLabel != null)
+				_languageDropdownLabel.text = GetLanguageDisplayName(LocalizationManager.CurrentLanguage) + "  ▼";
+		}
+
+		private static string GetLanguageDisplayName(string language)
+		{
+			if (string.Equals(language, LocalizationManager.SimplifiedChinese, StringComparison.OrdinalIgnoreCase)) return "简体中文";
+			if (string.Equals(language, LocalizationManager.Japanese, StringComparison.OrdinalIgnoreCase)) return "日本語";
+			return "English";
 		}
 
 		private void CreateSettingNoteSkinSelector(Transform parent)
@@ -719,7 +833,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingSimultaneousLineEnabled = enabled;
 			if (_settingSimultaneousLineLabel != null)
 			{
-				_settingSimultaneousLineLabel.text = enabled ? "开启" : "关闭";
+				_settingSimultaneousLineLabel.text = LocalizationManager.Get(enabled ? "settings.on" : "settings.off");
 			}
 		}
 
@@ -766,8 +880,8 @@ namespace Sekai.CustomMusicScoreManager
 			if (_settingMusicInfoDisplayModeLabel != null)
 			{
 				_settingMusicInfoDisplayModeLabel.text = _settingMusicInfoDisplayMode == LiveSettingData.MusicInfoDisplayModeCustomScore
-					? "自制谱模式"
-					: "正常模式";
+					? LocalizationManager.Get("settings.custom_mode")
+					: LocalizationManager.Get("settings.normal_mode");
 			}
 		}
 
@@ -815,7 +929,7 @@ namespace Sekai.CustomMusicScoreManager
 			{
 				_settingLiveBackgroundModeLabel.text = _settingLiveBackgroundMode == LiveSettingData.CustomMusicScoreBackgroundMode2DMV
 					? "2DMV"
-					: "封面";
+					: LocalizationManager.Get("manager.field.jacket");
 			}
 		}
 
@@ -856,7 +970,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingFastLateFlickEnabled = enabled;
 			if (_settingFastLateFlickLabel != null)
 			{
-				_settingFastLateFlickLabel.text = enabled ? "开启" : "关闭";
+				_settingFastLateFlickLabel.text = LocalizationManager.Get(enabled ? "settings.on" : "settings.off");
 			}
 		}
 
@@ -898,7 +1012,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingFullscreenEnabled = enabled;
 			if (_settingFullscreenLabel != null)
 			{
-				_settingFullscreenLabel.text = enabled ? "开启" : "关闭";
+				_settingFullscreenLabel.text = LocalizationManager.Get(enabled ? "settings.on" : "settings.off");
 			}
 		}
 
@@ -1098,7 +1212,7 @@ namespace Sekai.CustomMusicScoreManager
 				}
 			}
 			UpdateSelection(selected ?? (_items.Count > 0 ? _items[0] : null));
-			SetStatus("已加载 " + _items.Count.ToString(CultureInfo.InvariantCulture) + " 个谱面。");
+			SetLocalizedStatus("manager.status.loaded", _items.Count);
 		}
 
 		private RowView CreateRow(RectTransform parent, CustomMusicScoreManagerItem item)
@@ -1136,7 +1250,7 @@ namespace Sekai.CustomMusicScoreManager
 			SetAnchor(status.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-22f, 16f), new Vector2(178f, 30f));
 			status.color = item.HasAudio && item.HasScore ? new Color32(126, 221, 166, 255) : new Color32(255, 184, 100, 255);
 
-			return new RowView(root, image, item);
+			return new RowView(root, image, status, item);
 		}
 
 		private void UpdateSelection(CustomMusicScoreManagerItem item)
@@ -1163,7 +1277,7 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (!hasSelection)
 			{
-				_detailTitle.text = "请选择谱面";
+				_detailTitle.text = LocalizationManager.Get("manager.select_score");
 				_detailMeta.text = string.Empty;
 				_detailStatus.text = string.Empty;
 				SetBestResultText(null);
@@ -1174,9 +1288,8 @@ namespace Sekai.CustomMusicScoreManager
 
 			CustomMusicScoreManifest manifest = item.Entry.Manifest;
 			_detailTitle.text = manifest.scoreTitle;
-			_detailMeta.text = string.Format(
-				CultureInfo.InvariantCulture,
-				"曲名：{0}\nID：{1}\n路径：{2}\n更新：{3:yyyy-MM-dd HH:mm}",
+			_detailMeta.text = LocalizationManager.Format(
+				"manager.detail.summary",
 				manifest.title,
 				manifest.id,
 				item.Entry.RootDirectory,
@@ -1208,7 +1321,7 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (record == null)
 			{
-				_bestResultLeftText.text = _selected == null ? string.Empty : "暂无游玩记录";
+				_bestResultLeftText.text = _selected == null ? string.Empty : LocalizationManager.Get("manager.no_record");
 				_bestResultRightText.text = string.Empty;
 				return;
 			}
@@ -1239,7 +1352,7 @@ namespace Sekai.CustomMusicScoreManager
 				File.Exists(entry.AudioPath),
 				File.Exists(entry.JacketPath));
 			RefreshList();
-			SetStatus("已创建谱面。");
+			SetLocalizedStatus("manager.status.created");
 		}
 
 		private void OpenEditor()
@@ -1252,7 +1365,7 @@ namespace Sekai.CustomMusicScoreManager
 			CustomMusicScoreEntry entry = CustomMusicScoreStorage.LoadEntry(_selected.Entry.RootDirectory);
 			if (entry == null)
 			{
-				SetStatus("无法加载谱面。");
+				SetLocalizedStatus("manager.status.score_load_failed");
 				RefreshList();
 				return;
 			}
@@ -1294,46 +1407,46 @@ namespace Sekai.CustomMusicScoreManager
 			entry ??= CustomMusicScoreStorage.LoadEntry(_selected.Entry.RootDirectory);
 			if (entry == null)
 			{
-				SetStatus("无法加载谱面。");
+				SetLocalizedStatus("manager.status.score_load_failed");
 				RefreshList();
 				return;
 			}
 
 			if (!File.Exists(entry.ScorePath))
 			{
-				SetStatus("找不到谱面文件。");
+				SetLocalizedStatus("manager.status.score_missing");
 				return;
 			}
 			if (!File.Exists(entry.AudioPath))
 			{
-				SetStatus("找不到音频文件。");
+				SetLocalizedStatus("manager.status.audio_missing");
 				return;
 			}
 
 			MusicScoreMakerData scoreData = entry.LoadScore();
 			if (scoreData == null)
 			{
-				SetStatus("无法加载谱面文件。");
+				SetLocalizedStatus("manager.status.score_file_failed");
 				return;
 			}
 			if (!HasPlayableNotes(scoreData))
 			{
-				SetStatus("没有可游玩的音符。");
+				SetLocalizedStatus("manager.status.no_notes");
 				return;
 			}
 
-			SetStatus("正在加载音频...");
+			SetLocalizedStatus("manager.status.loading_audio");
 			bool audioReady = await entry.RegisterAudioAsync(this.GetCancellationTokenOnDestroy());
 			if (!audioReady)
 			{
-				SetStatus("无法加载音频文件。");
+				SetLocalizedStatus("manager.status.audio_load_failed");
 				return;
 			}
 
 			FreeLiveBootData bootData = CreateDirectPlayBootData(entry, scoreData, isAuto);
 			if (bootData == null)
 			{
-				SetStatus("无法创建游玩启动数据。");
+				SetLocalizedStatus("manager.status.play_data_failed");
 				return;
 			}
 
@@ -1341,7 +1454,7 @@ namespace Sekai.CustomMusicScoreManager
 			Sekai.Core.EntryPoint.PlayMode = Sekai.Core.PlayMode.SoloLive;
 			LiveTransitioner.SafeForceFinish(null);
 			ScreenManager.Instance?.PushUIScreen(MenuScreenType.LiveLoading, false);
-			SetStatus(isAuto ? "正在开始自动游玩..." : "正在开始游玩...");
+			SetLocalizedStatus(isAuto ? "manager.status.starting_auto" : "manager.status.starting_play");
 		}
 
 		private static bool HasPlayableNotes(MusicScoreMakerData data)
@@ -1475,7 +1588,7 @@ namespace Sekai.CustomMusicScoreManager
 			CustomMusicScoreEntry entry = CustomMusicScoreManagerService.DuplicateEntry(_selected.Entry);
 			_selected = entry == null ? null : new CustomMusicScoreManagerItem(entry, DateTime.Now, true, File.Exists(entry.ScorePath), File.Exists(entry.AudioPath), File.Exists(entry.JacketPath));
 			RefreshList();
-			SetStatus("已复制谱面。");
+			SetLocalizedStatus("manager.status.duplicated");
 		}
 
 		private void DeleteSelected()
@@ -1499,7 +1612,7 @@ namespace Sekai.CustomMusicScoreManager
 				true);
 			if (dialog != null)
 			{
-				dialog.SetMessageBodyText("确定要删除谱面吗？\n\n" + title + "\n\n这个操作无法撤销。");
+				dialog.SetMessageBodyText(LocalizationManager.Format("manager.confirm.delete", title));
 				return;
 			}
 
@@ -1520,7 +1633,7 @@ namespace Sekai.CustomMusicScoreManager
 				_selected = null;
 			}
 			RefreshList();
-			SetStatus("已删除 " + title + "。");
+			SetLocalizedStatus("manager.status.deleted", title);
 		}
 
 		private void ExportSelected()
@@ -1532,19 +1645,19 @@ namespace Sekai.CustomMusicScoreManager
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 			string defaultName = _selected.Entry.Manifest.scoreTitle + "_" + _selected.Entry.Manifest.id;
-			string destination = SaveStandaloneFile("导出自制谱", CustomMusicScoreStorage.RootDirectory, defaultName, "zip");
+			string destination = SaveStandaloneFile(LocalizationManager.Get("manager.file.export_score"), CustomMusicScoreStorage.RootDirectory, defaultName, "zip");
 			if (string.IsNullOrEmpty(destination))
 			{
 				return;
 			}
 
 			string path = CustomMusicScoreManagerService.ExportZip(_selected.Entry, destination);
-			SetStatus(string.IsNullOrEmpty(path) ? "导出失败。" : "已导出：" + path);
+			SetLocalizedStatus(string.IsNullOrEmpty(path) ? "manager.status.export_failed" : "manager.status.exported", path);
 #elif UNITY_ANDROID || UNITY_IOS
 			ExportSelectedNative();
 #else
 			string path = CustomMusicScoreManagerService.ExportZip(_selected.Entry);
-			SetStatus(string.IsNullOrEmpty(path) ? "导出失败。" : "已导出：" + path);
+			SetLocalizedStatus(string.IsNullOrEmpty(path) ? "manager.status.export_failed" : "manager.status.exported", path);
 #endif
 		}
 
@@ -1553,16 +1666,16 @@ namespace Sekai.CustomMusicScoreManager
 #if UNITY_EDITOR || UNITY_STANDALONE
 			CustomMusicScoreEntry entry = null;
 			string path = PickStandaloneFile(
-				"导入自制谱ZIP",
+				LocalizationManager.Get("manager.file.import_zip"),
 				string.Empty,
-				new ExtensionFilter("自制谱ZIP", "zip"));
+				new ExtensionFilter(LocalizationManager.Get("manager.file.score_zip"), "zip"));
 			if (!string.IsNullOrEmpty(path))
 			{
 				entry = CustomMusicScoreManagerService.ImportZip(path);
 			}
 			else
 			{
-				string folder = PickStandaloneFolder("导入自制谱文件夹", string.Empty);
+				string folder = PickStandaloneFolder(LocalizationManager.Get("manager.file.import_folder"), string.Empty);
 				if (!string.IsNullOrEmpty(folder))
 				{
 					entry = CustomMusicScoreManagerService.ImportFolder(folder);
@@ -1571,13 +1684,13 @@ namespace Sekai.CustomMusicScoreManager
 			ApplyImportedEntry(entry);
 #elif UNITY_ANDROID || UNITY_IOS
 			PickNativeFile(
-				"导入自制谱ZIP",
-				"导入已取消或失败。",
+				LocalizationManager.Get("manager.file.import_zip"),
+				LocalizationManager.Get("manager.status.import_cancelled"),
 				path => ApplyImportedEntry(CustomMusicScoreManagerService.ImportZip(path)),
 				"zip");
 			return;
 #else
-			SetStatus("当前平台暂不支持运行时导入，请手动复制谱面。");
+			SetLocalizedStatus("manager.status.import_unsupported");
 			return;
 #endif
         }
@@ -1588,11 +1701,11 @@ namespace Sekai.CustomMusicScoreManager
 			{
 				_selected = new CustomMusicScoreManagerItem(entry, DateTime.Now, true, File.Exists(entry.ScorePath), File.Exists(entry.AudioPath), File.Exists(entry.JacketPath));
 				RefreshList();
-				SetStatus("已导入谱面。");
+				SetLocalizedStatus("manager.status.imported_score");
 			}
 			else
 			{
-				SetStatus("导入已取消或失败。");
+				SetLocalizedStatus("manager.status.import_cancelled");
 			}
 		}
 
@@ -1605,26 +1718,26 @@ namespace Sekai.CustomMusicScoreManager
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 			string path = PickStandaloneFile(
-				"导入音频文件",
+				LocalizationManager.Get("manager.file.import_audio"),
 				string.Empty,
-				new ExtensionFilter("音频文件", "ogg", "mp3", "wav"));
+				new ExtensionFilter(LocalizationManager.Get("manager.file.audio"), "ogg", "mp3", "wav"));
 			if (string.IsNullOrEmpty(path))
 			{
-				SetStatus("已取消导入音频。");
+				SetLocalizedStatus("manager.status.audio_cancelled");
 				return;
 			}
 
-			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceAudioFile, "已导入音频");
+			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceAudioFile, "manager.status.imported_audio");
 #elif UNITY_ANDROID || UNITY_IOS
 			PickNativeFile(
-				"导入音频文件",
-				"已取消导入音频。",
-				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceAudioFile, "已导入音频"),
+				LocalizationManager.Get("manager.file.import_audio"),
+				LocalizationManager.Get("manager.status.audio_cancelled"),
+				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceAudioFile, "manager.status.imported_audio"),
 				"ogg",
 				"mp3",
 				"wav");
 #else
-			SetStatus("当前平台暂不支持导入音频文件，请手动复制。");
+			SetLocalizedStatus("manager.status.audio_import_unsupported");
 #endif
 		}
 
@@ -1637,26 +1750,26 @@ namespace Sekai.CustomMusicScoreManager
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 			string path = PickStandaloneFile(
-				"导入封面文件",
+				LocalizationManager.Get("manager.file.import_jacket"),
 				string.Empty,
-				new ExtensionFilter("图片文件", "png", "jpg", "jpeg"));
+				new ExtensionFilter(LocalizationManager.Get("manager.file.image"), "png", "jpg", "jpeg"));
 			if (string.IsNullOrEmpty(path))
 			{
-				SetStatus("已取消导入封面。");
+				SetLocalizedStatus("manager.status.jacket_cancelled");
 				return;
 			}
 
-			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceJacketFile, "已导入封面");
+			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceJacketFile, "manager.status.imported_jacket");
 #elif UNITY_ANDROID || UNITY_IOS
 			PickNativeFile(
-				"导入封面文件",
-				"已取消导入封面。",
-				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceJacketFile, "已导入封面"),
+				LocalizationManager.Get("manager.file.import_jacket"),
+				LocalizationManager.Get("manager.status.jacket_cancelled"),
+				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceJacketFile, "manager.status.imported_jacket"),
 				"png",
 				"jpg",
 				"jpeg");
 #else
-			SetStatus("当前平台暂不支持导入封面文件，请手动复制。");
+			SetLocalizedStatus("manager.status.jacket_import_unsupported");
 #endif
 		}
 
@@ -1669,26 +1782,26 @@ namespace Sekai.CustomMusicScoreManager
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 			string path = PickStandaloneFile(
-				"导入谱面文件",
+				LocalizationManager.Get("manager.file.import_score"),
 				string.Empty,
-				new ExtensionFilter("谱面文件", "json", "txt", "sus"));
+				new ExtensionFilter(LocalizationManager.Get("manager.file.score"), "json", "txt", "sus"));
 			if (string.IsNullOrEmpty(path))
 			{
-				SetStatus("已取消导入谱面。");
+				SetLocalizedStatus("manager.status.score_cancelled");
 				return;
 			}
 
-			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceScoreFile, "已导入谱面");
+			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceScoreFile, "manager.status.imported_score_file");
 #elif UNITY_ANDROID || UNITY_IOS
 			PickNativeFile(
-				"导入谱面文件",
-				"已取消导入谱面。",
-				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceScoreFile, "已导入谱面"),
+				LocalizationManager.Get("manager.file.import_score"),
+				LocalizationManager.Get("manager.status.score_cancelled"),
+				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceScoreFile, "manager.status.imported_score_file"),
 				"json",
 				"txt",
 				"sus");
 #else
-			SetStatus("当前平台暂不支持导入谱面文件，请手动复制。");
+			SetLocalizedStatus("manager.status.score_import_unsupported");
 #endif
 		}
 
@@ -1701,24 +1814,24 @@ namespace Sekai.CustomMusicScoreManager
 
 #if UNITY_EDITOR || UNITY_STANDALONE
 			string path = PickStandaloneFile(
-				"导入2DMV视频",
+				LocalizationManager.Get("manager.file.import_video"),
 				string.Empty,
-				new ExtensionFilter("MP4视频", "mp4"));
+				new ExtensionFilter(LocalizationManager.Get("manager.file.video"), "mp4"));
 			if (string.IsNullOrEmpty(path))
 			{
-				SetStatus("已取消导入2DMV。");
+				SetLocalizedStatus("manager.status.video_cancelled");
 				return;
 			}
 
-			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceVideoFile, "已导入2DMV");
+			ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceVideoFile, "manager.status.imported_video");
 #elif UNITY_ANDROID || UNITY_IOS
 			PickNativeFile(
-				"导入2DMV视频",
-				"已取消导入2DMV。",
-				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceVideoFile, "已导入2DMV"),
+				LocalizationManager.Get("manager.file.import_video"),
+				LocalizationManager.Get("manager.status.video_cancelled"),
+				path => ReplaceSelectedFile(path, CustomMusicScoreManagerService.ReplaceVideoFile, "manager.status.imported_video"),
 				"mp4");
 #else
-			SetStatus("当前平台暂不支持导入2DMV视频，请手动复制。");
+			SetLocalizedStatus("manager.status.video_import_unsupported");
 #endif
 		}
 
@@ -1746,24 +1859,24 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			if (NativeFilePicker.IsFilePickerBusy())
 			{
-				SetStatus("文件选择器已经打开。");
+				SetLocalizedStatus("manager.status.picker_busy");
 				return;
 			}
 
 			string path = CustomMusicScoreManagerService.ExportZip(_selected.Entry);
 			if (string.IsNullOrEmpty(path))
 			{
-				SetStatus("导出失败。");
+				SetLocalizedStatus("manager.status.export_failed");
 				return;
 			}
 
 			if (!NativeFilePicker.CanExportFiles())
 			{
-				SetStatus("当前平台不支持文件导出，已导出到：" + path);
+				SetLocalizedStatus("manager.status.export_local", path);
 				return;
 			}
 
-			SetStatus("请选择导出位置...");
+			SetLocalizedStatus("manager.status.choose_export");
 			NativeFilePicker.ExportFile(path, success =>
 			{
 				if (this == null)
@@ -1771,7 +1884,7 @@ namespace Sekai.CustomMusicScoreManager
 					return;
 				}
 
-				SetStatus(success ? "已导出：" + path : "导出已取消或失败。");
+				SetLocalizedStatus(success ? "manager.status.exported" : "manager.status.export_cancelled", path);
 			});
 		}
 
@@ -1779,7 +1892,7 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			if (NativeFilePicker.IsFilePickerBusy())
 			{
-				SetStatus("文件选择器已经打开。");
+				SetLocalizedStatus("manager.status.picker_busy");
 				return;
 			}
 
@@ -1869,7 +1982,7 @@ namespace Sekai.CustomMusicScoreManager
 				CustomMusicScoreEntry entry = replaceFile(_selected.Entry, sourcePath);
 				if (entry == null)
 				{
-					SetStatus("导入失败。");
+					SetLocalizedStatus("manager.status.import_failed");
 					return;
 				}
 
@@ -1881,7 +1994,7 @@ namespace Sekai.CustomMusicScoreManager
 					File.Exists(entry.AudioPath),
 					File.Exists(entry.JacketPath));
 				RefreshList();
-				SetStatus(successStatus + ": " + Path.GetFileName(sourcePath));
+				SetLocalizedStatus(successStatus, Path.GetFileName(sourcePath));
 			}
 			catch (Exception ex)
 			{
@@ -1892,7 +2005,7 @@ namespace Sekai.CustomMusicScoreManager
 		private void SaveSelectedManifest()
 		{
 			CustomMusicScoreEntry savedEntry = SaveSelectedManifestFromForm(refreshList: true);
-			SetStatus(savedEntry != null ? "配置已保存。" : "保存配置失败。");
+			SetLocalizedStatus(savedEntry != null ? "manager.status.config_saved" : "manager.status.config_save_failed");
 		}
 
 		private CustomMusicScoreEntry SaveSelectedManifestFromForm(bool refreshList)
@@ -2074,10 +2187,27 @@ namespace Sekai.CustomMusicScoreManager
 
 		private void SetStatus(string message)
 		{
+			_statusLocalizationKey = null;
+			_statusLocalizationArguments = null;
 			if (_statusText != null)
 			{
 				_statusText.text = message ?? string.Empty;
 			}
+		}
+
+		private void SetLocalizedStatus(string key, params object[] arguments)
+		{
+			_statusLocalizationKey = key;
+			_statusLocalizationArguments = arguments;
+			RefreshLocalizedStatus();
+		}
+
+		private void RefreshLocalizedStatus()
+		{
+			if (_statusText == null || string.IsNullOrEmpty(_statusLocalizationKey)) return;
+			_statusText.text = _statusLocalizationArguments == null || _statusLocalizationArguments.Length == 0
+				? LocalizationManager.Get(_statusLocalizationKey)
+				: LocalizationManager.Format(_statusLocalizationKey, _statusLocalizationArguments);
 		}
 
 		private static TMP_InputField CreateInputField(Transform parent, string label, string placeholder)
@@ -2279,6 +2409,7 @@ namespace Sekai.CustomMusicScoreManager
 			GameObject root = new GameObject(name, typeof(RectTransform), typeof(ScrollRect));
 			root.transform.SetParent(parent, false);
 			ScrollRect scrollRect = root.GetComponent<ScrollRect>();
+			scrollRect.scrollSensitivity = 48f;
 			scrollRect.horizontal = true;
 			scrollRect.vertical = false;
 			scrollRect.movementType = ScrollRect.MovementType.Clamped;
@@ -2313,6 +2444,7 @@ namespace Sekai.CustomMusicScoreManager
 			GameObject root = new GameObject(name, typeof(RectTransform), typeof(ScrollRect));
 			root.transform.SetParent(parent, false);
 			ScrollRect scrollRect = root.GetComponent<ScrollRect>();
+			scrollRect.scrollSensitivity = 48f;
 
 			Image viewportImage = CreateImage("Viewport", root.transform, new Color32(20, 24, 30, 255));
 			Mask mask = viewportImage.gameObject.AddComponent<Mask>();
@@ -2348,6 +2480,7 @@ namespace Sekai.CustomMusicScoreManager
 			root.transform.SetParent(parent, false);
 			root.GetComponent<Image>().color = new Color32(24, 29, 36, 255);
 			ScrollRect scrollRect = root.GetComponent<ScrollRect>();
+			scrollRect.scrollSensitivity = 48f;
 
 			RectTransform viewport = CreateRect("Viewport", root.transform);
 			viewport.gameObject.AddComponent<RectMask2D>();
@@ -2400,6 +2533,7 @@ namespace Sekai.CustomMusicScoreManager
 			tmp.color = new Color32(238, 243, 247, 255);
 			tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			tmp.overflowMode = TextOverflowModes.Ellipsis;
+			RuntimeLocalizationBootstrap.TryBind(tmp);
 			return tmp;
 		}
 
@@ -2497,12 +2631,15 @@ namespace Sekai.CustomMusicScoreManager
 
 			public Image Background { get; }
 
+			public TextMeshProUGUI Status { get; }
+
 			public CustomMusicScoreManagerItem Item { get; }
 
-			public RowView(GameObject root, Image background, CustomMusicScoreManagerItem item)
+			public RowView(GameObject root, Image background, TextMeshProUGUI status, CustomMusicScoreManagerItem item)
 			{
 				Root = root;
 				Background = background;
+				Status = status;
 				Item = item;
 			}
 		}

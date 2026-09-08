@@ -1,4 +1,5 @@
 ﻿using System;
+using Sekai.Localization;
 using Sekai.MusicScoreMaker.Common;
 
 namespace Sekai.CustomMusicScoreManager
@@ -23,21 +24,21 @@ namespace Sekai.CustomMusicScoreManager
 			{
 				if (!HasManifest)
 				{
-					return "缺少配置";
+					return LocalizationManager.Get("manager.item.missing_config");
 				}
 				if (!HasScore)
 				{
-					return "缺少谱面";
+					return LocalizationManager.Get("manager.item.missing_score");
 				}
 				if (!HasAudio)
 				{
-					return "缺少音频";
+					return LocalizationManager.Get("manager.item.missing_audio");
 				}
 				if (!HasJacket)
 				{
-					return "缺少封面";
+					return LocalizationManager.Get("manager.item.missing_jacket");
 				}
-				return "就绪";
+				return LocalizationManager.Get("manager.item.ready");
 			}
 		}
 

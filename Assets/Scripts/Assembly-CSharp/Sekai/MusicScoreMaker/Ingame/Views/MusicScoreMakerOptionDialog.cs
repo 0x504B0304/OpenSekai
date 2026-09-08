@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Sekai.Localization;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.UI;
@@ -61,6 +62,24 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_selectedLayoutPatternIndexLandscape = MusicScoreMakerSettingsManager.SelectedLayoutPatternIndexLandscape;
 			_settingItems = CreateSettingItems();
 			CreateUIComponents();
+		}
+
+		private void OnEnable()
+		{
+			LocalizationManager.LanguageChanged += OnLanguageChanged;
+		}
+
+		protected override void OnDisable()
+		{
+			LocalizationManager.LanguageChanged -= OnLanguageChanged;
+			base.OnDisable();
+		}
+
+		private void OnLanguageChanged()
+		{
+			if (!_isUIComponentsCreated) return;
+			_settingItems = CreateSettingItems();
+			RebuildUI();
 		}
 
 		private void OnClearClipboardButtonClicked()
@@ -184,52 +203,54 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			List<IUIElementInfo> items = new List<IUIElementInfo>
 			{
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_DISPLAY_SETTINGS),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_ZOOM_TIMELINE_STEP, MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_STEP, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_STEP, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.ZoomTimelineStep, value => MusicScoreMakerSettingsManager.ZoomTimelineStep = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_ZOOM_TIMELINE_MAX, MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_SCALE, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ZoomTimelineScaleMax, value => MusicScoreMakerSettingsManager.ZoomTimelineScaleMax = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_ZOOM_TIMELINE_MIN, MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_SCALE, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.ZoomTimelineScaleMin, value => MusicScoreMakerSettingsManager.ZoomTimelineScaleMin = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_SCORE_DISPLAY_SCALE_H, MusicScoreMakerSettingData.MIN_SCORE_DISPLAY_SCALE, MusicScoreMakerSettingData.MAX_SCORE_DISPLAY_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal, value => MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_SCORE_DISPLAY_SCALE_V, MusicScoreMakerSettingData.MIN_SCORE_DISPLAY_SCALE, MusicScoreMakerSettingData.MAX_SCORE_DISPLAY_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ScoreDisplayScaleVertical, value => MusicScoreMakerSettingsManager.ScoreDisplayScaleVertical = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_TOOL_WINDOW_CHILD_SCALE, MusicScoreMakerSettingData.DEFAULT_TOOL_WINDOW_CHILD_SCALE_MIN, MusicScoreMakerSettingData.DEFAULT_TOOL_WINDOW_CHILD_SCALE_MAX, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ToolWindowChildScale, value => MusicScoreMakerSettingsManager.ToolWindowChildScale = value),
-				UIElementInfoFactory.CreateToggleParent(MusicScoreMakerOptionConstants.SETTING_LAYOUT_PATTERN, MusicScoreMakerOptionConstants.TOGGLE_GROUP_LAYOUT_PATTERN)
+				UIElementInfoFactory.CreateText(LocalizeOption("section.display")),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("zoom.step"), MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_STEP, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_STEP, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.ZoomTimelineStep, value => MusicScoreMakerSettingsManager.ZoomTimelineStep = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("zoom.max"), MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_SCALE, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ZoomTimelineScaleMax, value => MusicScoreMakerSettingsManager.ZoomTimelineScaleMax = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("zoom.min"), MusicScoreMakerSettingData.MIN_ZOOM_TIMELINE_SCALE, MusicScoreMakerSettingData.MAX_ZOOM_TIMELINE_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.ZoomTimelineScaleMin, value => MusicScoreMakerSettingsManager.ZoomTimelineScaleMin = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("score_scale.horizontal"), MusicScoreMakerSettingData.MIN_SCORE_DISPLAY_SCALE, MusicScoreMakerSettingData.MAX_SCORE_DISPLAY_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal, value => MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("score_scale.vertical"), MusicScoreMakerSettingData.MIN_SCORE_DISPLAY_SCALE, MusicScoreMakerSettingData.MAX_SCORE_DISPLAY_SCALE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ScoreDisplayScaleVertical, value => MusicScoreMakerSettingsManager.ScoreDisplayScaleVertical = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("tool_scale"), MusicScoreMakerSettingData.DEFAULT_TOOL_WINDOW_CHILD_SCALE_MIN, MusicScoreMakerSettingData.DEFAULT_TOOL_WINDOW_CHILD_SCALE_MAX, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ToolWindowChildScale, value => MusicScoreMakerSettingsManager.ToolWindowChildScale = value),
+				UIElementInfoFactory.CreateToggleParent(LocalizeOption("layout"), MusicScoreMakerOptionConstants.TOGGLE_GROUP_LAYOUT_PATTERN)
 			};
 
 			for (int i = 0; i < MusicScoreMakerSettingsManager.LayoutPatternCount; i++)
 			{
 				int patternIndex = i;
-				items.Add(UIElementInfoFactory.CreateToggle(string.Format(MusicScoreMakerOptionConstants.PATTERN_NAME_FORMAT, patternIndex + 1), MusicScoreMakerOptionConstants.TOGGLE_GROUP_LAYOUT_PATTERN, patternIndex));
+				items.Add(UIElementInfoFactory.CreateToggle(LocalizationManager.Format("editor.options.pattern", patternIndex + 1), MusicScoreMakerOptionConstants.TOGGLE_GROUP_LAYOUT_PATTERN, patternIndex));
 			}
 
 			items.AddRange(new IUIElementInfo[]
 			{
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_OPERATION_SETTINGS),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_UNDO_STACK_LIMIT, MusicScoreMakerSettingData.MIN_UNDO_STACK_LIMIT, MusicScoreMakerSettingData.MAX_UNDO_STACK_LIMIT, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.UndoStackLimit, value => MusicScoreMakerSettingsManager.UndoStackLimit = Mathf.RoundToInt(value)),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_SHOW_FOCUS_TICKS_RATE, MusicScoreMakerSettingData.MIN_SHOW_FOCUS_TICKS_RATE, MusicScoreMakerSettingData.MAX_SHOW_FOCUS_TICKS_RATE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ShowFocusTicksRate, value => MusicScoreMakerSettingsManager.ShowFocusTicksRate = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_TICKS_PER_SCROLL_STEP, MusicScoreMakerSettingData.MIN_TICKS_PER_SCROLL_STEP, MusicScoreMakerSettingData.MAX_TICKS_PER_SCROLL_STEP, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.TicksPerScrollStep, value => MusicScoreMakerSettingsManager.TicksPerScrollStep = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_ENABLE_SWIPE_SCROLL, () => MusicScoreMakerSettingsManager.EnableSwipeScroll, value => MusicScoreMakerSettingsManager.EnableSwipeScroll = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_ENABLE_INVALID_PLACEMENT_CHECK, () => MusicScoreMakerSettingsManager.EnableInvalidPlacementCheck, value => MusicScoreMakerSettingsManager.EnableInvalidPlacementCheck = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_AREA_SELECT_PARTIAL_OVERLAP, () => MusicScoreMakerSettingsManager.AreaSelectPartialOverlap, value => MusicScoreMakerSettingsManager.AreaSelectPartialOverlap = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_NOTE_EDGE_WIDTH, MusicScoreMakerSettingData.MIN_NOTE_EDGE_WIDTH, MusicScoreMakerSettingData.MAX_NOTE_EDGE_WIDTH, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteEdgeWidth, value => MusicScoreMakerSettingsManager.NoteEdgeWidth = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_NOTE_Y_SCALE_START_THRESHOLD, MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_START_THRESHOLD, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_START_THRESHOLD, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleStartThreshold, value => MusicScoreMakerSettingsManager.NoteYScaleStartThreshold = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_NOTE_Y_SCALE_END_THRESHOLD, MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_END_THRESHOLD, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_END_THRESHOLD, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleEndThreshold, value => MusicScoreMakerSettingsManager.NoteYScaleEndThreshold = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_NOTE_Y_SCALE_MIN, MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_MIN, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_MIN, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleMin, value => MusicScoreMakerSettingsManager.NoteYScaleMin = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_DRAW_SMALLER_TICK_TO_BACK, () => MusicScoreMakerSettingsManager.DrawSmallerTickToBack, value => MusicScoreMakerSettingsManager.DrawSmallerTickToBack = value),
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_AUTO_SAVE_SETTINGS),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_AUTO_SAVE_ENABLED, () => MusicScoreMakerSettingsManager.AutoSaveEnabled, value => MusicScoreMakerSettingsManager.AutoSaveEnabled = value),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_AUTO_SAVE_INTERVAL, MusicScoreMakerSettingData.MIN_AUTO_SAVE_INTERVAL, MusicScoreMakerSettingData.MAX_AUTO_SAVE_INTERVAL, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.AutoSaveInterval, value => MusicScoreMakerSettingsManager.AutoSaveInterval = Mathf.RoundToInt(value)),
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_DISPLAY_LINE_SETTINGS),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_SHOW_BAR_LINES, () => MusicScoreMakerSettingsManager.ShowBarLines, value => MusicScoreMakerSettingsManager.ShowBarLines = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_SHOW_BEAT_LINES, () => MusicScoreMakerSettingsManager.ShowBeatLines, value => MusicScoreMakerSettingsManager.ShowBeatLines = value),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_SHOW_QUANTIZE_LINES, () => MusicScoreMakerSettingsManager.ShowQuantizeLines, value => MusicScoreMakerSettingsManager.ShowQuantizeLines = value),
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_AUDIO_SETTINGS),
-				UIElementInfoFactory.CreateCheckBox(MusicScoreMakerOptionConstants.SETTING_PLAY_MUSIC_SE_ENABLED, () => MusicScoreMakerSettingsManager.PlayMusicSEEnabled, value => MusicScoreMakerSettingsManager.PlayMusicSEEnabled = value),
-				UIElementInfoFactory.CreateText(MusicScoreMakerOptionConstants.SECTION_SYSTEM),
-				UIElementInfoFactory.CreateSlider(MusicScoreMakerOptionConstants.SETTING_MAX_CLIPBOARD_CACHE_COUNT, MusicScoreMakerSettingData.MIN_MAX_CLIPBOARD_CACHE_COUNT, MusicScoreMakerSettingData.MAX_MAX_CLIPBOARD_CACHE_COUNT, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.MaxClipboardCacheCount, value => MusicScoreMakerSettingsManager.MaxClipboardCacheCount = Mathf.RoundToInt(value)),
-				UIElementInfoFactory.CreateButton(MusicScoreMakerOptionConstants.SETTING_RESET_SETTING_DATA, MusicScoreMakerSettingsManager.ResetSettingData),
-				UIElementInfoFactory.CreateButton("クリップボードキャッシュ削除", OnClearClipboardButtonClicked)
+				UIElementInfoFactory.CreateText(LocalizeOption("section.operation")),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("undo_limit"), MusicScoreMakerSettingData.MIN_UNDO_STACK_LIMIT, MusicScoreMakerSettingData.MAX_UNDO_STACK_LIMIT, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.UndoStackLimit, value => MusicScoreMakerSettingsManager.UndoStackLimit = Mathf.RoundToInt(value)),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("focus_rate"), MusicScoreMakerSettingData.MIN_SHOW_FOCUS_TICKS_RATE, MusicScoreMakerSettingData.MAX_SHOW_FOCUS_TICKS_RATE, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.ShowFocusTicksRate, value => MusicScoreMakerSettingsManager.ShowFocusTicksRate = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("scroll_step"), MusicScoreMakerSettingData.MIN_TICKS_PER_SCROLL_STEP, MusicScoreMakerSettingData.MAX_TICKS_PER_SCROLL_STEP, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_3, () => MusicScoreMakerSettingsManager.TicksPerScrollStep, value => MusicScoreMakerSettingsManager.TicksPerScrollStep = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("swipe_scroll"), () => MusicScoreMakerSettingsManager.EnableSwipeScroll, value => MusicScoreMakerSettingsManager.EnableSwipeScroll = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("invalid_check"), () => MusicScoreMakerSettingsManager.EnableInvalidPlacementCheck, value => MusicScoreMakerSettingsManager.EnableInvalidPlacementCheck = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("partial_select"), () => MusicScoreMakerSettingsManager.AreaSelectPartialOverlap, value => MusicScoreMakerSettingsManager.AreaSelectPartialOverlap = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("note_edge"), MusicScoreMakerSettingData.MIN_NOTE_EDGE_WIDTH, MusicScoreMakerSettingData.MAX_NOTE_EDGE_WIDTH, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteEdgeWidth, value => MusicScoreMakerSettingsManager.NoteEdgeWidth = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("note_y_start"), MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_START_THRESHOLD, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_START_THRESHOLD, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleStartThreshold, value => MusicScoreMakerSettingsManager.NoteYScaleStartThreshold = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("note_y_end"), MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_END_THRESHOLD, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_END_THRESHOLD, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleEndThreshold, value => MusicScoreMakerSettingsManager.NoteYScaleEndThreshold = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("note_y_min"), MusicScoreMakerSettingData.MIN_NOTE_Y_SCALE_MIN, MusicScoreMakerSettingData.MAX_NOTE_Y_SCALE_MIN, SliderValueType.Float, MusicScoreMakerOptionConstants.FORMAT_FLOAT_2, () => MusicScoreMakerSettingsManager.NoteYScaleMin, value => MusicScoreMakerSettingsManager.NoteYScaleMin = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("draw_order"), () => MusicScoreMakerSettingsManager.DrawSmallerTickToBack, value => MusicScoreMakerSettingsManager.DrawSmallerTickToBack = value),
+				UIElementInfoFactory.CreateText(LocalizeOption("section.autosave")),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("autosave.enabled"), () => MusicScoreMakerSettingsManager.AutoSaveEnabled, value => MusicScoreMakerSettingsManager.AutoSaveEnabled = value),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("autosave.interval"), MusicScoreMakerSettingData.MIN_AUTO_SAVE_INTERVAL, MusicScoreMakerSettingData.MAX_AUTO_SAVE_INTERVAL, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.AutoSaveInterval, value => MusicScoreMakerSettingsManager.AutoSaveInterval = Mathf.RoundToInt(value)),
+				UIElementInfoFactory.CreateText(LocalizeOption("section.lines")),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("lines.bar"), () => MusicScoreMakerSettingsManager.ShowBarLines, value => MusicScoreMakerSettingsManager.ShowBarLines = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("lines.beat"), () => MusicScoreMakerSettingsManager.ShowBeatLines, value => MusicScoreMakerSettingsManager.ShowBeatLines = value),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("lines.quantize"), () => MusicScoreMakerSettingsManager.ShowQuantizeLines, value => MusicScoreMakerSettingsManager.ShowQuantizeLines = value),
+				UIElementInfoFactory.CreateText(LocalizeOption("section.audio")),
+				UIElementInfoFactory.CreateCheckBox(LocalizeOption("audio.se"), () => MusicScoreMakerSettingsManager.PlayMusicSEEnabled, value => MusicScoreMakerSettingsManager.PlayMusicSEEnabled = value),
+				UIElementInfoFactory.CreateText(LocalizeOption("section.system")),
+				UIElementInfoFactory.CreateSlider(LocalizeOption("clipboard.limit"), MusicScoreMakerSettingData.MIN_MAX_CLIPBOARD_CACHE_COUNT, MusicScoreMakerSettingData.MAX_MAX_CLIPBOARD_CACHE_COUNT, SliderValueType.Integer, MusicScoreMakerOptionConstants.FORMAT_INTEGER, () => MusicScoreMakerSettingsManager.MaxClipboardCacheCount, value => MusicScoreMakerSettingsManager.MaxClipboardCacheCount = Mathf.RoundToInt(value)),
+				UIElementInfoFactory.CreateButton(LocalizeOption("settings.reset"), MusicScoreMakerSettingsManager.ResetSettingData),
+				UIElementInfoFactory.CreateButton(LocalizeOption("clipboard.clear"), OnClearClipboardButtonClicked)
 			});
 
 			return items.ToArray();
 		}
+
+		private static string LocalizeOption(string suffix) => LocalizationManager.Get("editor.options." + suffix);
 	}
 }

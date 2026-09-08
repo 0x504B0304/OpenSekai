@@ -1,7 +1,10 @@
+using Sekai.Localization;
 using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.UI;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Sekai.MusicScoreMaker.Ingame.Views
 {
@@ -11,6 +14,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private UIPartsToggle _toggle;
 
 		private CustomButton _button;
+		private const string LocalizedLabelName = "LocalizedAreaSelectLabel";
 
 		private static readonly IsMusicPlayingEvent IsMusicPlayingEventCache;
 
@@ -38,8 +42,50 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_toggle.Setup(UIPartsToggleBase.State.Off);
 			_toggle.OnToggleOn = OnToggleOn;
 			_toggle.OnToggleOff = OnToggleOff;
+			EnsureLocalizedLabel();
 			SetupEventDispatcher();
 			UpdateInteractable();
+		}
+
+		private void EnsureLocalizedLabel()
+		{
+			Transform existing = transform.Find(LocalizedLabelName);
+			if (existing != null)
+			{
+				existing.SetAsLastSibling();
+				return;
+			}
+
+			GameObject overlay = new GameObject(LocalizedLabelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+			overlay.transform.SetParent(transform, false);
+			RectTransform overlayRect = (RectTransform)overlay.transform;
+			overlayRect.anchorMin = new Vector2(0f, 1f);
+			overlayRect.anchorMax = new Vector2(1f, 1f);
+			overlayRect.pivot = new Vector2(0.5f, 1f);
+			overlayRect.anchoredPosition = Vector2.zero;
+			overlayRect.sizeDelta = new Vector2(0f, 34f);
+			Image background = overlay.GetComponent<Image>();
+			background.color = new Color32(12, 17, 48, 255);
+			background.raycastTarget = false;
+
+			GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+			labelObject.transform.SetParent(overlay.transform, false);
+			TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+			TMP_Text reference = FindFirstObjectByType<TMP_Text>();
+			if (reference != null) label.font = reference.font;
+			label.fontSize = 20f;
+			label.color = Color.white;
+			label.alignment = TextAlignmentOptions.MidlineLeft;
+			label.textWrappingMode = TextWrappingModes.NoWrap;
+			label.overflowMode = TextOverflowModes.Ellipsis;
+			label.raycastTarget = false;
+			RectTransform labelRect = label.rectTransform;
+			labelRect.anchorMin = Vector2.zero;
+			labelRect.anchorMax = Vector2.one;
+			labelRect.offsetMin = new Vector2(18f, 0f);
+			labelRect.offsetMax = new Vector2(-4f, 0f);
+			labelObject.AddComponent<LocalizedTextBinding>().Key = "editor.range_select";
+			overlay.transform.SetAsLastSibling();
 		}
 
 		public void Dispose()

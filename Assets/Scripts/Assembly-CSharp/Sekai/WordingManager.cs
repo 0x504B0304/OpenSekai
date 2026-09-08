@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Sekai.Localization;
 using Sekai.UI;
 using UnityEngine;
 
@@ -152,7 +153,10 @@ namespace Sekai
 				return key;
 			}
 
-			return dictionary.TryGetValue(key, out var value) ? value : string.Empty;
+			if (!dictionary.TryGetValue(key, out var value)) return string.Empty;
+			return RuntimeLocalizationBootstrap.TryGetLocalizationKey(value, out string localizationKey)
+				? LocalizationManager.Get(localizationKey)
+				: value;
 		}
 
 		public static string GetFormat(string key, params object[] args)
