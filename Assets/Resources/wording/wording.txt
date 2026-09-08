@@ -36,6 +36,8 @@ MSG_INHERIT_IPASS_NOT_FOUND,指定のプレイヤーデータが見つかりま�
 MSG_INHERIT_INVALID_ID,無効な引き継ぎIDが指定されました。\n新しく引き継ぎIDを発行してから再度お試しください。
 MSG_INHERIT_SUCCESS,プレイヤーデータの引き継ぎが完了しました。今回利用した引き継ぎID・パスワードを再度利用することはできません。\n次回引き継ぎを行う場合は、「データ引き継ぎ」にて、改めて設定を行ってください。
 MSG_INHERIT_WARNING_INVALID_ID,※引き継ぎ後、同じ引き継ぎIDを再度利用することはできません。
+MSG_RESTORE_SCOPE,Please select the restore scope.
+MSG_RESTORE_ALL_CONFIRM,Are you sure you want to restore all backup?\nThis will overwrite current settings.
 MSG_QUIT_APPLICATION,プロジェクトセカイを終了しますか？
 MSG_SERVER_MAINTENANCE,サーバーメンテナンス中です。\nタイトルへ戻ります。
 MSG_STARTAPP_REGISTER,ユーザーを作成しています。
@@ -86,6 +88,8 @@ WORD_PASSWORD,パスワード
 WORD_PLAYER_NAME,プレイヤー名
 WORD_QUIT_CONFIRM,確認
 WORD_QUIT_CONFIRM_OK,終了する
+RESTORE_SCORES,Restore scores only
+RESTORE_ALL,Restore all
 WORD_RANK,ランク
 WORD_RELATION_SITE,関連サイト
 WORD_RETRY,リトライ

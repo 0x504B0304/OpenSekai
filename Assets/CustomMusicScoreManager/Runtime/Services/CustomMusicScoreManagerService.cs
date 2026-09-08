@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -161,7 +161,7 @@ namespace Sekai.CustomMusicScoreManager
 				return null;
 			}
 
-			string tempRoot = CreateTemporaryPath("OpenSekaiCustomScore_");
+			string tempRoot = CreateTemporaryPath("OjskCommunityCustomScore_");
 			Directory.CreateDirectory(tempRoot);
 			try
 			{
@@ -267,7 +267,7 @@ namespace Sekai.CustomMusicScoreManager
 			string readSourcePath = sourcePath;
 			if (IsPathInsideDirectory(entry.RootDirectory, sourcePath))
 			{
-				tempCopyPath = CreateTemporaryPath("OpenSekaiCustomScoreFile_", extension);
+				tempCopyPath = CreateTemporaryPath("OjskCommunityCustomScoreFile_", extension);
 				File.Copy(sourcePath, tempCopyPath, true);
 				readSourcePath = tempCopyPath;
 			}
@@ -418,7 +418,7 @@ namespace Sekai.CustomMusicScoreManager
 			string tempCopyPath = null;
 			if (IsPathInsideDirectory(entry.RootDirectory, sourcePath))
 			{
-				tempCopyPath = CreateTemporaryPath("OpenSekaiCustomScoreFile_", extension);
+				tempCopyPath = CreateTemporaryPath("OjskCommunityCustomScoreFile_", extension);
 				File.Copy(sourcePath, tempCopyPath, true);
 				copySourcePath = tempCopyPath;
 			}

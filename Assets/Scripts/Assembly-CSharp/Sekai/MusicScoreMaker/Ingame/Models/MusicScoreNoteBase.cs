@@ -5,6 +5,7 @@ using MessagePack;
 using Newtonsoft.Json;
 using Sekai.Live;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
+using UnityEngine;
 
 namespace Sekai.MusicScoreMaker.Ingame.Models
 {
@@ -50,7 +51,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		public NoteType type;
 
 		[Key(6)]
-		public float speedRatio;
+		public float speedRatio = 1f;
 
 		[Key(7)]
 		public NoteLineType noteLineType;
@@ -89,6 +90,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			GuideEndOffset = right - laneEnd - 1f;
 		}
 
+		[Key(16)]
+		public bool isDecoration;
+
+		[Key(17)]
+		public string guideColor = null;
+
 		[JsonIgnore]
 		[IgnoreMember]
 		[field: NonSerialized]
@@ -125,10 +132,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		{
 			previousConnectionId = -1;
 			nextConnectionId = -1;
+			guideColor = null;
 			ConnectedNotes = new List<MusicScoreNoteBase>();
 		}
 
-		public MusicScoreNoteBase(int id, long ticks, int laneStart, int laneEnd, NoteCategory category, NoteType type = NoteType.Default, float speedRatio = 1f, NoteLineType noteLineType = NoteLineType.Linear, NoteBaseType noteBaseType = NoteBaseType.Normal, bool isSkip = false, NoteDirection direction = NoteDirection.Default, int previousConnectionId = -1, int nextConnectionId = -1)
+		public MusicScoreNoteBase(int id, long ticks, int laneStart, int laneEnd, NoteCategory category, NoteType type = NoteType.Default, float speedRatio = 1f, NoteLineType noteLineType = NoteLineType.Linear, NoteBaseType noteBaseType = NoteBaseType.Normal, bool isSkip = false, NoteDirection direction = NoteDirection.Default, int previousConnectionId = -1, int nextConnectionId = -1, bool isDecoration = false)
 		{
 			this.id = id;
 			this.ticks = ticks;
@@ -143,6 +151,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			this.nextConnectionId = nextConnectionId;
 			this.direction = direction;
 			this.isSkip = isSkip;
+			this.isDecoration = isDecoration;
 			ConnectedNotes = new List<MusicScoreNoteBase>();
 		}
 
@@ -225,7 +234,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				noteBase.LineType,
 				baseType,
 				noteBase.IsSkip,
-				noteBase.Direction) { GuideStartOffset = noteBase.GuideStartOffset, GuideEndOffset = noteBase.GuideEndOffset };
+				noteBase.Direction,
+				-1,
+				-1,
+				noteBase.IsDecoration)
+			{
+				GuideStartOffset = noteBase.GuideStartOffset,
+				GuideEndOffset = noteBase.GuideEndOffset,
+				guideColor = (noteBase as LongNote)?.guideColor
+			};
 		}
 
 		public NoteBase ToNoteBase(LiveBundleBuildData bundleBuildData, List<MusicScoreNoteBase> noteArray, MusicScoreInfo[] musicScoreInfos, MusicScoreMakerData musicScoreMakerData)
@@ -283,16 +300,27 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			case NoteBaseType.Connection:
 				note = new ConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote connectionLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					connectionLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.HiddenConnection:
 				note = new HiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData), noteBase.noteLineType);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote hiddenConnectionLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					hiddenConnectionLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			case NoteBaseType.LongHoldCombo:
 				note = new LongHoldCombo(musicScoreInfo, noteBase.type, noteBase.speedRatio, LiveUtility.GetLaneOffset(noteBase.category, bundleBuildData));
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
 				longNote?.AddHoldCombo((LongHoldCombo)note);
 				return note;
 			case NoteBaseType.FrictionLong:
@@ -324,6 +352,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				note = new GuideHiddenConnectionNote(musicScoreInfo, 0, noteBase.laneStart, noteBase.laneEnd, noteBase.category, bundleBuildData, noteBase.type, noteBase.speedRatio, noteBase.noteLineType);
 				ApplyGuideGeometry(noteBase, note);
 				note.SetSkip(noteBase.isSkip);
+				note.SetDecoration(noteBase.isDecoration);
+				if (note is LongNote guideHiddenLongNote && !string.IsNullOrEmpty(noteBase.guideColor))
+				{
+					guideHiddenLongNote.SetGuideColor(noteBase.guideColor);
+				}
 				longNote?.AddConnectionNote(note);
 				return note;
 			default:
@@ -331,6 +364,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 			}
 			note.SetSkip(noteBase.isSkip);
 			ApplyGuideGeometry(noteBase, note);
+			note.SetDecoration(noteBase.isDecoration);
+			// 设置引导线自定义颜色
+			if (note is LongNote longNoteForColor && !string.IsNullOrEmpty(noteBase.guideColor))
+			{
+				longNoteForColor.SetGuideColor(noteBase.guideColor);
+			}
 			SetParent(longNote, note);
 			return note;
 		}
@@ -512,6 +551,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 				ArtGroupId = ArtGroupId,
 				GuideStartOffset = GuideStartOffset,
 				GuideEndOffset = GuideEndOffset,
+				isDecoration = isDecoration,
+				guideColor = guideColor,
 				ConnectedNotes = new List<MusicScoreNoteBase>(ConnectedNotes)
 			};
 		}

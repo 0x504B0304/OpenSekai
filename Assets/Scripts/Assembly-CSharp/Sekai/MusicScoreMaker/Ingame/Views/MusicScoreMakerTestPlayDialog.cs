@@ -40,7 +40,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 			if (_liveModeButton != null)
 			{
-				// OpenSekai: test play only supports the lightweight 2D background and local mp4 2DMV path.
+				// OjskCommunity: test play only supports the lightweight 2D background and local mp4 2DMV path.
 				_liveModeButton.SetupFixedModes(LiveSettingData.LiveModeType.Low, LiveSettingData.LiveModeType.Mode2D);
 				if (MusicScoreMakerSettingsManager.TryGetTestPlayLiveModeType(out LiveSettingData.LiveModeType liveModeType))
 				{

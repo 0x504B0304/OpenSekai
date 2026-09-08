@@ -28,10 +28,17 @@ namespace Sekai.Live
 				return;
 			}
 
+			// Decoration long hold combo should not be marked as Last/Miss
+			// Check parent note's decoration status
+			bool isDecorationCombo = IsDecoration || (parentNote != null && parentNote.IsDecoration);
+
 			if (State == NoteState.Last)
 			{
-				JudgeInfo = (NoteResult.Miss, NoteResultDescription.None);
-				State = NoteState.Done;
+				if (!isDecorationCombo)
+				{
+					JudgeInfo = (NoteResult.Miss, NoteResultDescription.None);
+					State = NoteState.Done;
+				}
 				return;
 			}
 
@@ -48,7 +55,11 @@ namespace Sekai.Live
 				return;
 			}
 
-			State = NoteState.Last;
+			// Decoration long hold combo should not be marked as Last
+			if (!isDecorationCombo)
+			{
+				State = NoteState.Last;
+			}
 		}
 
 		public override bool IsJudgment(ref LiveTouch touch, float lane)

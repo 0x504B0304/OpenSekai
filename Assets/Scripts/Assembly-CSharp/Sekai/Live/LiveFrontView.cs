@@ -159,6 +159,21 @@ namespace Sekai.Live
 
 		public override void MusicStart(float musicTime)
 		{
+			bool skipMusicInfo = baseController?.BootData?.IsCustomMusicScore == true &&
+				baseController?.BootData?.LiveSettingData?.SkipsCustomMusicScoreMusicInfo == true;
+
+			if (skipMusicInfo)
+			{
+				// Skip mode: immediately disable MusicInfoView and set brightness
+				MusicInfoView musicInfoView = ResolveMusicInfo();
+				if (musicInfoView != null)
+				{
+					musicInfoView.gameObject.SetActive(false);
+				}
+				SetBackgroundBrightness(GetTargetBackgroundBrightness());
+				return;
+			}
+
 			if (baseController?.BootData?.MusicData?.PlayStartEffectEnabled == true)
 			{
 				UpdateSpriteAlpha(0f);
@@ -166,6 +181,7 @@ namespace Sekai.Live
 				musicStartTween = DOVirtual.DelayedCall(0.1f, () =>
 				{
 					ResolveMusicInfo()?.Play(1f, false, 0f, null, null);
+					PlayMaimaiMusicInfoSe();
 					FadeInBackground(() => PlayStartVoice(1f));
 				}, true);
 				return;
@@ -237,6 +253,14 @@ namespace Sekai.Live
 				return;
 			}
 
+			// Decoration notes: play tap effect and SE, but do not show judgment text
+			if (note.IsDecoration)
+			{
+				Effect(note);
+				return;
+			}
+
+			// Normal notes: play effect and show judgment text
 			Effect(note);
 			judgmentView?.Excute(note.JudgeInfo);
 			judgmentDescriptionView?.Excute(note.JudgeInfo);
@@ -401,7 +425,7 @@ namespace Sekai.Live
 
 			lastScreenWidth = currentWidth;
 			lastScreenHeight = currentHeight;
-			// OpenSekai: desktop windows can be resized during live; keep camera/world-space effects aligned.
+			// OjskCommunity: desktop windows can be resized during live; keep camera/world-space effects aligned.
 			ResolveCameraReferences();
 			cameraSizeUpdater?.ForceUpdate();
 			UpdateBackgroundScale();
@@ -562,7 +586,8 @@ namespace Sekai.Live
 		{
 			if (autoLabel != null)
 			{
-				autoLabel.SetActive(isAuto);
+				bool useFakePerfect = LiveSettingData.LoadFromStorage()?.UsesAutoFakePerfectMode ?? false;
+				autoLabel.SetActive(isAuto && !useFakePerfect);
 			}
 		}
 
@@ -672,6 +697,35 @@ namespace Sekai.Live
 			noteShowRateView ??= GetComponentInChildren<NoteShowRateView>(true);
 		}
 
+		private void PlayMaimaiMusicInfoSe()
+		{
+			if (baseController?.BootData?.LiveSettingData?.UseMaimaiMusicInfoSe != true)
+			{
+				return;
+			}
+
+			if (baseController?.BootData?.IsCustomMusicScore == true &&
+				baseController?.BootData?.LiveSettingData?.SkipsCustomMusicScoreMusicInfo == true)
+			{
+				return;
+			}
+
+			if (baseController?.BootData?.MusicData?.IsTestPlay == true)
+			{
+				return;
+			}
+
+			AudioClip clip = Resources.Load<AudioClip>("maimusicinfo");
+			if (clip != null)
+			{
+				AudioSource.PlayClipAtPoint(clip, Vector3.zero, 2f);
+			}
+			else
+			{
+				Debug.LogError("[MaimaiSE] Failed to load AudioClip from Resources");
+			}
+		}
+
 		private void PlayStartVoice(float durationScale)
 		{
 			if (collaborationModeState != LiveMusicData.CollaborationModeState.On)
@@ -723,7 +777,7 @@ namespace Sekai.Live
 				return;
 			}
 
-			// OpenSekai: the effect camera is disabled after setup, so keep its
+			// OjskCommunity: the effect camera is disabled after setup, so keep its
 			// projection in sync when desktop/mobile resolution changes at runtime.
 			if (Screen.height > 0)
 			{

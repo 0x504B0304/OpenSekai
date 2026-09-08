@@ -18,6 +18,12 @@ OpenSekai 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩�
 
 调用时使用 `<Unity 安装目录>/Editor/Unity.exe -batchmode -quit -projectPath <项目目录> -executeMethod <构建入口>`。构建流程会先生成对应平台的 AssetBundle，再生成 Player；默认输出分别为 `Builds/Windows` 和 `Builds/Android/OpenSekai.apk`。
 
+## 社区功能
+
+当前分支合并了 [OpenSekai Community](https://github.com/kamcdev/OpenSekai_Community) 的功能，包括谱面自动保存、预览与音频波形、备份恢复和 Android 分享、自定义 Autoplay 与结算动画、判定线透明度与引导线颜色、谱面时长计算、负流速与单键变速、装饰音符、PC 键鼠操作，以及 Windows/Android 谱面视频生成。
+
+Windows 视频生成需要 `ffmpeg/` 中的 FFmpeg 程序及动态库。发布便携版时应将该目录完整放在主程序同级目录。
+
 ## 目录说明
 
 - `Assets/Scripts/Assembly-CSharp/Sekai`：主要游戏逻辑。

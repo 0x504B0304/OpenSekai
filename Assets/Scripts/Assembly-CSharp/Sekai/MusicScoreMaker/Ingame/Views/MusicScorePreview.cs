@@ -167,6 +167,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			UpdateSubWindowCache();
 		}
 
+		public void SetMinimapAudioSamples(float[] samples, long totalTicks, long fillerTicks)
+		{
+			if (_minimapView != null)
+			{
+				_minimapView.SetAudioSamples(samples, totalTicks, fillerTicks);
+			}
+		}
+
 		public void Dispose()
 		{
 			DisposeEventDispatcher();
@@ -375,6 +383,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				isLeftExpand = GetIsShowExpand(musicScore),
 				isRightExpand = GetIsShowExpand(musicScore),
 				isSelectAllConnectedNotes = GetIsShowSelectAllConnectedNotes(musicScore, hasSelectedNotes, hasSelectedEvents),
+				isSpeedChange = GetIsShowSpeedChange(musicScore, hasSelectedNotes),
+				isDecoration = GetIsShowDecoration(musicScore, hasSelectedNotes),
+				isColor = IsGuideNoteColorButtonVisible(musicScore, hasSelectedNotes),
 				anchoredPosition = anchoredPosition,
 				sizeDelta = sizeDelta,
 				coordinateSpaceTransform = _notesView != null ? _notesView.RectTransform : null,
@@ -439,6 +450,83 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private static bool GetIsShowSelectAllConnectedNotes(MusicScoreMakerData musicScore, bool hasSelectedNotes, bool hasSelectedEvents)
 		{
 			return hasSelectedNotes && MusicScoreMakerUtility.HasPartiallySelectedConnectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild());
+		}
+
+		private static bool GetIsShowSpeedChange(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			return MusicScoreMakerUtility.CanCopySelectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild());
+		}
+
+		private static bool GetIsShowDecoration(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			// 检查是否为完整的长条组合
+			if (!MusicScoreMakerUtility.CanCopySelectedNotes(musicScore.SelectedNoteIdList, musicScore.GetNoteIdCacheOrRebuild()))
+			{
+				return false;
+			}
+			// 检查是否包含引导线（Guide类型的音符）
+			foreach (int noteId in musicScore.SelectedNoteTargetIdSet)
+			{
+				MusicScoreNoteBase note = musicScore.FindNote(noteId);
+				if (note != null && IsGuideNoteType(note.noteBaseType))
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
+		private static bool IsGuideNoteType(MusicScoreNoteBase.NoteBaseType noteBaseType)
+		{
+			return noteBaseType == MusicScoreNoteBase.NoteBaseType.Guide ||
+				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideEnd ||
+				   noteBaseType == MusicScoreNoteBase.NoteBaseType.GuideHiddenConnection;
+		}
+
+		private static bool IsGuideNoteColorButtonVisible(MusicScoreMakerData musicScore, bool hasSelectedNotes)
+		{
+			if (!hasSelectedNotes || musicScore == null)
+			{
+				return false;
+			}
+			HashSet<int> selectedNoteTargetIdSet = musicScore.SelectedNoteTargetIdSet;
+			if (selectedNoteTargetIdSet == null || selectedNoteTargetIdSet.Count == 0)
+			{
+				return false;
+			}
+			Dictionary<int, MusicScoreNoteBase> noteIdCache = musicScore.GetNoteIdCacheOrRebuild();
+			List<MusicScoreNoteBase> connectedNotes = new List<MusicScoreNoteBase>();
+			foreach (int noteId in selectedNoteTargetIdSet)
+			{
+				if (!noteIdCache.TryGetValue(noteId, out MusicScoreNoteBase note) || note == null)
+				{
+					continue;
+				}
+				// 检查第一个音符是否为引导线类型
+				if (!MusicScoreMakerUtility.IsGuideCategory(note.category))
+				{
+					return false;
+				}
+				// 获取该音符所属连接线的所有音符
+				note.FindConnectedNotes(noteIdCache, connectedNotes);
+				// 检查连接线中的所有音符是否都被选中
+				foreach (MusicScoreNoteBase connectedNote in connectedNotes)
+				{
+					if (connectedNote == null || !selectedNoteTargetIdSet.Contains(connectedNote.id))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
 		}
 
 		private void CalculateSelectedObjectsBounds(MusicScoreMakerData musicScore, long startTicks, long endTicks, out Vector2? anchoredPosition, out Vector2? sizeDelta)

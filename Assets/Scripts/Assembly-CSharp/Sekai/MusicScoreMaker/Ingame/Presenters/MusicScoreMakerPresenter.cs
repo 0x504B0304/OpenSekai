@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -10,6 +10,7 @@ using System.Threading;
 using CriWare;
 using Cysharp.Threading.Tasks;
 using Cysharp.Threading.Tasks.CompilerServices;
+using DG.Tweening;
 using JetBrains.Annotations;
 using Sekai.ApiData;
 using Sekai.Live;
@@ -19,6 +20,7 @@ using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.MusicScoreMaker.Ingame.Views;
 using Sekai.Service;
+using Sekai.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using MusicScorePreviewPlayData = Sekai.MusicScoreMaker.OutGame.MusicScorePreviewPlayData;
@@ -88,6 +90,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 			public MusicScoreNoteBase TargetNote;
 		}
+
+		// Flag to signal that we want to open settings after returning to top
+		public static bool _isReturningToEditorWithSettings = false;
 
 		[StructLayout((LayoutKind)0, Size = 1)]
 		private struct NoteTicksComparer : IComparer<MusicScoreNoteBase>
@@ -1245,6 +1250,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			if (MusicScoreMakerEventDispatcher.ExistsInstance)
 			{
 				MusicScoreMakerEventDispatcher.Instance.ClearSavedUndoRedoStackIfNotTestPlay();
+				MusicScoreMakerEventDispatcher.Instance.StopAutoSaveTimer();
 				MusicScoreMakerEventDispatcher.Instance.Dispose();
 			}
 		}
@@ -1298,6 +1304,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			if (MusicScoreMakerEventDispatcher.ExistsInstance)
 			{
 				MusicScoreMakerEventDispatcher.Instance.ResetAutoSaveTimer();
+				if (LiveSettingData.LoadFromStorage().AutoSaveIntervalIndex > 0)
+				{
+					MusicScoreMakerEventDispatcher.Instance.StartAutoSaveTimer();
+				}
 			}
 
 			_isFinishedFadeBGM = true;
@@ -1318,7 +1328,23 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			{
 				_view.SetUpdatePresenterAction(Update);
 			}
+			ShowAutoSaveDisabledWarningIfNeeded();
 			MusicScoreMakerRuleSlideTutorialUtility.TryShowTutorialSlideIfFirstTime("music_score_maker");
+		}
+
+		private void ShowAutoSaveDisabledWarningIfNeeded()
+		{
+			if (LiveSettingData.LoadFromStorage().AutoSaveIntervalIndex == 0)
+			{
+				Common2ButtonDialog dialog = ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+					DialogType.Common2ButtonDialog,
+					null,
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					allowCloseExternal: true);
+				dialog?.SetMessageBodyText("当前未开启自动保存，为防止数据丢失，可在「设置」>「自动保存间隔」开启自动保存功能");
+			}
 		}
 
 		private async UniTask WaitMusicReadyCore(CancellationToken token)
@@ -2307,7 +2333,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				_model.FillerSec = 0f;
 			}
 			float playbackStartTime = Mathf.Max(currentTime, 0f) + _model.FillerSec;
-			// OpenSekai: official data keeps secForMusicScoreMaker within the playable BGM range.
+			// OjskCommunity: official data keeps secForMusicScoreMaker within the playable BGM range.
 			// Custom charts can exceed the audio length, so avoid seeking CRI/our shim past EOF.
 			if (_model.MusicLength > 0L && playbackStartTime * 1000f >= _model.MusicLength)
 			{
@@ -2914,6 +2940,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			if (_model.LiveSettings != null)
 			{
 				_model.TimingAdjust = _model.LiveSettings.TimingAdjustData * (1f / 60f);
+				LiveConfig.ScoreMakerPreviewModeIndex = _model.LiveSettings.ScoreMakerPreviewModeIndex;
 			}
 			if (_model.CustomMusicScoreEntry != null)
 			{
@@ -2984,6 +3011,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			_model.UpdateComboCountMinimum(_model.MasterMusicSec);
 			SetFocusTicks(_model.FocusTicks);
 			NotifyMusicScoreAndTimelineChanged(refresh: true);
+			if (audioRegistered)
+			{
+				float[] samples = entry.GetAudioSamples(4096);
+				if (samples != null && _model.MusicScoreMakerData != null)
+				{
+					List<MusicScoreEventData> events = _model.MusicScoreMakerData.MusicScoreEventDataList;
+					float audioDurationSec = entry.AudioLengthMs / 1000f;
+					float fillerSec = _model.FillerSec;
+					long totalTicks = MusicScoreMakerUtility.GetTicksFromTime(audioDurationSec, events);
+					long fillerTicks = MusicScoreMakerUtility.GetTicksFromTime(fillerSec, events);
+					_view?.MusicScorePreview?.SetMinimapAudioSamples(samples, totalTicks, fillerTicks);
+				}
+			}
 			await UniTask.Yield();
 			_musicReadyCts?.Dispose();
 			_musicReadyCts = null;
@@ -5269,6 +5309,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Register<OnExpandInputPointerUpEvent>(OnExpandInputPointerUp);
 			dispatcher.Register<SelectAllConnectedNotesEvent>(SelectAllConnectedNotes);
 			dispatcher.Register<SetFocusTicksEvent>(OnSetFocusTicksForAreaSelect);
+			// 键盘快捷键事件
+			dispatcher.Register<DeleteSelectedNotesAndEventsEvent>(DeleteSelectedNotesAndEvents);
+			dispatcher.Register<ShowIncompleteSelectionWarningEvent>(ShowIncompleteSelectionWarning);
 		}
 
 		private void DisposePreviewEventDispatcher()
@@ -5293,6 +5336,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			dispatcher.Remove<OnExpandInputPointerUpEvent>(OnExpandInputPointerUp);
 			dispatcher.Remove<SelectAllConnectedNotesEvent>(SelectAllConnectedNotes);
 			dispatcher.Remove<SetFocusTicksEvent>(OnSetFocusTicksForAreaSelect);
+			// 键盘快捷键事件
+			dispatcher.Remove<DeleteSelectedNotesAndEventsEvent>(DeleteSelectedNotesAndEvents);
+			dispatcher.Remove<ShowIncompleteSelectionWarningEvent>(ShowIncompleteSelectionWarning);
 		}
 
 		private void OnNotePreviewClick(OnNotePreviewClickEvent obj)
@@ -6263,6 +6309,46 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			bool previousSelected = note.previousConnectionId == -1 || selectedNoteIds.Contains(note.previousConnectionId);
 			bool nextSelected = note.nextConnectionId == -1 || selectedNoteIds.Contains(note.nextConnectionId);
 			return previousSelected && nextSelected;
+		}
+
+		/// <summary>
+		/// 处理删除选中音符和事件的事件（Delete键或Ctrl+X剪切时触发）
+		/// </summary>
+		private void DeleteSelectedNotesAndEvents(DeleteSelectedNotesAndEventsEvent evt)
+		{
+			if (_model?.IsEditRestricted == true)
+			{
+				return;
+			}
+			RemoveSelectedAndTemporaryNotesAndEventList();
+		}
+
+		/// <summary>
+		/// 显示不完整选择警告对话框
+		/// 当用户尝试对部分选中的长条或引导线进行复制/剪切/删除操作时显示
+		/// </summary>
+		private void ShowIncompleteSelectionWarning(ShowIncompleteSelectionWarningEvent evt)
+		{
+			if (evt == null)
+			{
+				return;
+			}
+			string actionType = evt.ActionType;
+			string actionName = actionType;
+			switch (actionType)
+			{
+				case "copy":
+					actionName = "复制";
+					break;
+				case "cut":
+					actionName = "剪切";
+					break;
+				case "delete":
+					actionName = "删除";
+					break;
+			}
+			// 显示提示消息
+			UnityEngine.Debug.LogWarning($"[MusicScoreMaker] 无法执行 {actionName} 操作：长条或引导线未完整选中。请选中所有连接的音符后再操作。");
 		}
 
 		private void ShowClipboardCacheList(ShowClipboardCacheListEvent evt)
@@ -7609,7 +7695,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				bootData.MusicData.CustomPlayLevel = difficulty?.playLevel ?? _model?.CustomMusicScoreEntry?.Manifest.playLevel ?? 0;
 				bootData.MusicData.MusicScore = musicScore;
 				bootData.MusicData.StartMusicTimeMs = MusicScoreMakerSettingsManager.CalcStartMusicTimeMs(bootData, Mathf.FloorToInt(_model?.FillerSec ?? 0f));
-				bootData.MusicData.PlayStartEffectEnabled = false;
+				// Test play mode always skips MusicInfo
+				// Normal play with skip mode setting also skips MusicInfo
+				// Otherwise uses normal setting (PlayStartEffectEnabled = true)
+				bool skipMusicInfo = bootData.MusicData.IsTestPlay || (bootData.LiveSettingData?.SkipsCustomMusicScoreMusicInfo ?? false);
+				bootData.MusicData.PlayStartEffectEnabled = !skipMusicInfo;
 			}
 
 			CustomMusicScoreEntry entry = _model?.CustomMusicScoreEntry;
@@ -7865,6 +7955,31 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 		private void AutoSaveMusicScore(AutoSaveMusicScoreEvent e)
 		{
 			SaveMusicScore(MusicScoreMakerRepository.GenerateAutoSaveFileName());
+			FlashSaveButtonForAutoSave().Forget();
+		}
+
+		private async UniTask FlashSaveButtonForAutoSave()
+		{
+			CustomButton saveButton = _view?.SaveButton;
+			CustomButton exitButton = _view?.ExitButton;
+			CustomButton testPlayButton = _view?.TestPlayButton;
+			if (saveButton == null || exitButton == null || testPlayButton == null)
+			{
+				return;
+			}
+			saveButton.interactable = false;
+			exitButton.interactable = false;
+			testPlayButton.interactable = false;
+			for (int i = 0; i < 3; i++)
+			{
+				saveButton.transform.localScale = new Vector3(0.95f, 0.95f, 1f);
+				await UniTask.Delay(100);
+				saveButton.transform.localScale = Vector3.one;
+				await UniTask.Delay(100);
+			}
+			saveButton.interactable = true;
+			exitButton.interactable = true;
+			testPlayButton.interactable = true;
 		}
 
 		private void QuickSaveMusicScore(QuickSaveMusicScoreEvent e)
@@ -8048,8 +8163,16 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void ShowClearNotesAndSpeedEventsDialog(ShowClearNotesAndSpeedEventsDialogEvent e)
 		{
-			// TODO(original): restore confirmation dialog.
-			ClearNotesAndSpeedEvents(new ClearNotesAndSpeedEventsEvent());
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => ClearNotesAndSpeedEvents(new ClearNotesAndSpeedEventsEvent()),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("是否确认重置谱面？将会清空所有音符\n可使用撤销恢复");
 		}
 
 		private void SaveAndPostMusicScore(SaveAndPostMusicScoreEvent e)
@@ -8284,7 +8407,30 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void CallTutorial(CallTutorialEvent e)
 		{
-			MusicScoreMakerRuleSlideTutorialUtility.TryShowTutorialSlideIfFirstTime("enter");
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => ShowTutorialTypeSelectionDialog(),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("是否确认查看说明？");
+		}
+
+		private void ShowTutorialTypeSelectionDialog()
+		{
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_TUTORIAL_TEXT_GUIDE",
+				"WORD_TUTORIAL_VIDEO_GUIDE",
+				() => Application.OpenURL("https://blog.jsoftstudio.top/read/%E6%96%87%E6%A1%A3/64bb276f-18a5-4eb5-b29e-6bca741db5c6"),
+				() => Application.OpenURL("https://www.bilibili.com/video/BV1f6Vh6pECA"),
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("请选择要查看的说明");
 		}
 
 		private void ShowNoteAndComboCountDialog(ShowNoteAndComboCountDialogEvent e)
@@ -8383,8 +8529,57 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OpenToolOptionDialog(OpenToolOptionDialogEvent e)
 		{
-			// TODO(original): restore MusicScoreMakerOptionDialog window creation.
-			MusicScoreMakerSettingsManager.SaveSettingData();
+			// Show confirmation dialog before opening system settings
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				OnConfirmOpenSystemSettings,
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText("是否打开设置？");
+		}
+
+		private void OnConfirmOpenSystemSettings()
+		{
+			// Save current editor state for restoration after settings closed
+			MusicScoreMakerData data = CurrentData();
+			if (_model != null && data != null)
+			{
+				// Store the boot data in a separate field that won't be cleared when returning to top
+				MusicScoreMakerEntryPoint.BootDataForSettingsReturn = new ScreenLayerMusicScoreMaker.BootArg
+				{
+					musicId = _model.MusicId,
+					difficulty = _model.Difficulty,
+					vocalId = _model.VocalId,
+					baseMusicScoreId = _model.BaseMusicScoreId,
+					baseMusicDifficultyId = _model.BaseMusicDifficultyId,
+					MusicScoreMakerData = DeepCopyHelper.DeepCopy(data),
+					FocusTicks = _model.FocusTicks,
+					QuantizeDivision = _model.QuantizeDivision,
+					FromScreenType = MenuScreenType.MusicScoreMakerTop,
+					LastSavedDataHash = _model.GetSavedDataHash(),
+					LastSavedDraftSlotNo = _model.LastSavedDraftSlotNo,
+					LastSavedDraft = _model.LastSavedDraft,
+					FullComboDataHash = _model.GetFullComboDataHash(),
+					MusicScoreDataHashAtTestPlay = _model.ComputeFullComboHash(),
+					IsReturnFromTestPlay = false,
+					IsFromFullComboCheck = false,
+					IsAllNotesIncludedInTestPlay = false,
+					CurrentMusicScoreScale = _model.CurrentMusicScoreScale,
+					CustomMusicScoreEntry = _model.CustomMusicScoreEntry
+				};
+			}
+
+			// Signal that we want to open settings after returning to top
+			// The MusicScoreMakerEntryPoint.Start() will check this and open settings
+			_isReturningToEditorWithSettings = true;
+
+			// Return to top (will open settings overlay when it loads)
+			MusicScoreMakerUtility.RequestTransitionToOutGame(MenuScreenType.MusicScoreMakerTop);
+			Dispose();
 		}
 
 		private void OnEnableInvalidPlacementCheckChanged(EnableInvalidPlacementCheckChangedEvent evt)

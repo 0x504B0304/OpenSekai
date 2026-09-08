@@ -6,6 +6,7 @@ using Sekai.MusicScoreMaker.Ingame.Input;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using Sekai.UI;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Serialization;
@@ -62,6 +63,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private RectTransform _rectTransform;
+
+		private CustomTextMesh _speedRatioText;
 
 		private RectTransform _parentRectTransform;
 
@@ -163,11 +166,50 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			_rectTransform ??= GetComponent<RectTransform>();
 			NoteId = UNUSED_ID;
+			CreateSpeedRatioText();
 			InitializeMaterials();
 			if (toolInputHandler != null)
 			{
 				toolInputHandler.RemoveAllAndAddListener(OnClick, null, OnDrag, OnPointerDown, OnPointerUp);
 			}
+		}
+
+		private void CreateSpeedRatioText()
+		{
+			GameObject textObj = new GameObject("SpeedRatioText");
+			textObj.transform.SetParent(transform);
+
+			RectTransform rectTransform = textObj.AddComponent<RectTransform>();
+			rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+			rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+			rectTransform.anchoredPosition = new Vector2(0f, 0f);
+			rectTransform.sizeDelta = new Vector2(150f, 40f);
+			rectTransform.localScale = new Vector3(1.5f, 1.5f, 1f);
+
+			textObj.AddComponent<CanvasRenderer>();
+
+			_speedRatioText = textObj.AddComponent<CustomTextMesh>();
+			_speedRatioText.fontSize = 32;
+			_speedRatioText.fontSizeMin = 12; // 最小字体大小
+			_speedRatioText.fontSizeMax = 32; // 最大字体大小
+			_speedRatioText.enableAutoSizing = true; // 启用自动字体大小调整
+			_speedRatioText.color = Color.black;
+			_speedRatioText.text = "";
+			_speedRatioText.alignment = TextAlignmentOptions.Center;
+			_speedRatioText.textWrappingMode = TextWrappingModes.NoWrap; // 禁用自动换行
+			_speedRatioText.overflowMode = TextOverflowModes.Overflow; // 设置溢出模式为溢出显示
+
+			// 加载支持中文的动态字体
+			TMP_FontAsset dynamicFont = Resources.Load<TMP_FontAsset>("font/FOT-RodinNTLGPro-EB SDF_Dynamic");
+			if (dynamicFont != null)
+			{
+				_speedRatioText.font = dynamicFont;
+			}
+
+			// 设置层级在最上方，确保显示在 note 之上
+			textObj.transform.SetAsLastSibling();
+
+			textObj.gameObject.SetActive(false);
 		}
 
 		public void SetNoteScaleMultiplier(float multiplier)
@@ -249,6 +291,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			gameObject.SetActive(true);
 			SetImage(noteBase.type, noteBase.category, noteBase.direction, noteBase.isSkip);
 			UpdateSelectedIndicator(noteBase, MusicScoreMakerData);
+			UpdateNote(noteBase);
 			if (noteBase.isSkip)
 			{
 				Dictionary<int, MusicScoreNoteBase> noteIdCache = MusicScoreMakerData.GetNoteIdCacheOrRebuild();
@@ -291,6 +334,65 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			bool hideArtCaps = !string.IsNullOrEmpty(noteBase.ArtGroupId) && !(isSelected && MusicScoreMakerData.SelectedNoteTargetIdSet.Count == 1);
 			if (_noteImage != null) _noteImage.canvasRenderer.SetAlpha(hideArtCaps ? 0f : 1f);
 			if (_connectionImage != null) _connectionImage.canvasRenderer.SetAlpha(hideArtCaps ? 0f : 1f);
+		}
+
+		public void UpdateNote(MusicScoreNoteBase note)
+		{
+			// 显示速度、装饰和引导线颜色文字
+			if (_speedRatioText != null)
+			{
+				bool isDecoration = note != null && note.isDecoration;
+				bool hasSpeedRatio = note != null && Mathf.Abs(note.speedRatio - 1.0f) > 0.001f;
+				bool hasGuideColor = note != null && !string.IsNullOrEmpty(note.guideColor);
+
+				bool shouldShowText = isDecoration || hasSpeedRatio || hasGuideColor;
+				_speedRatioText.gameObject.SetActive(shouldShowText);
+
+				if (shouldShowText)
+				{
+					// 组合显示格式
+					string decorationText = isDecoration ? "(装饰)" : "";
+					string speedText = hasSpeedRatio ? $"{note.speedRatio}x" : "";
+					string colorText = hasGuideColor ? $"(颜色:{note.guideColor})" : "";
+
+					if (isDecoration && hasSpeedRatio && hasGuideColor)
+					{
+						// 同时有装饰、单键变速和颜色：显示 "<速度>x(装饰)(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{speedText}{decorationText}{colorText}";
+					}
+					else if (isDecoration && hasSpeedRatio)
+					{
+						// 只有装饰和单键变速：显示 "<速度>x(装饰)"
+						_speedRatioText.text = $"{note.speedRatio}x(装饰)";
+					}
+					else if (isDecoration && hasGuideColor)
+					{
+						// 只有装饰和颜色：显示 "(装饰)(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{decorationText}{colorText}";
+					}
+					else if (hasSpeedRatio && hasGuideColor)
+					{
+						// 只有单键变速和颜色：显示 "<速度>x(颜色:#XXXXXX)"
+						_speedRatioText.text = $"{speedText}{colorText}";
+					}
+					else if (isDecoration)
+					{
+						// 只有装饰：显示 "(装饰)"
+						_speedRatioText.text = "(装饰)";
+					}
+					else if (hasSpeedRatio)
+					{
+						// 只有单键变速：显示 "<速度>x"
+						_speedRatioText.text = $"{note.speedRatio}x";
+					}
+					else if (hasGuideColor)
+					{
+						// 只有颜色：显示 "(颜色:#XXXXXX)"
+						_speedRatioText.text = colorText;
+					}
+					_speedRatioText.color = Color.black;
+				}
+			}
 		}
 
 		private void UpdateNoteColor(bool isSelected)

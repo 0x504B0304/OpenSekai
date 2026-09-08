@@ -97,9 +97,21 @@ namespace Sekai.Live
 
 		public static float GuideAlpha;
 
+		public static float JudgeLineAlpha;
+
+		public const int ScoreMakerPreviewModeThumbnail = 0;
+
+		public const int ScoreMakerPreviewModeWaveform = 1;
+
+		public const int ScoreMakerPreviewModeOverlay = 2;
+
+		public static int ScoreMakerPreviewModeIndex;
+
 		public static readonly string[] TimelineBundleNames;
 
 		public static readonly Vector2 SpawnPosition;
+
+		public static readonly Vector2 SpawnPositionNegative;
 
 		public static readonly Vector2[] JudgmentPositions;
 
@@ -249,10 +261,12 @@ namespace Sekai.Live
 			LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
 			LongNoteAlpha = liveSettingData.GetNoteAlpha();
 			GuideAlpha = liveSettingData.GetGuideAlpha();
+			JudgeLineAlpha = liveSettingData.GetJudgeLineAlpha();
 			SetNoteSkinAssetBundleName(Mathf.Clamp(liveSettingData.NoteSkinIndex, 0, 1));
 			SetNoteSeName(liveSettingData.NoteSeIndex);
 			SetNoteEffectName(liveSettingData.NoteEffect);
 			SetFeverEffectName(liveSettingData.FeverEffectTypeIndex);
+			ScoreMakerPreviewModeIndex = liveSettingData.ScoreMakerPreviewModeIndex;
 			CacheSpeedTime = 0f;
 			CacheTimingTime = 0f;
 			NoteSpeedOffset = 0.04f;
@@ -453,8 +467,10 @@ namespace Sekai.Live
 			SkillBundleName = "effect_asset/live/skill/default";
 			LongNoteAlpha = 1f;
 			GuideAlpha = 0.6f;
+			JudgeLineAlpha = 1f;
 			TimelineBundleNames = new[] { "camera", "character", "effect", "light", "stage", "penlight" };
 			SpawnPosition = new Vector2(0f, 5.46f);
+			SpawnPositionNegative = new Vector2(0f, -10f); // 屏幕下方外侧，用于负流速音符
 			JudgmentPositions = new[]
 			{
 				new Vector2(-6.544999f, -2.96f),

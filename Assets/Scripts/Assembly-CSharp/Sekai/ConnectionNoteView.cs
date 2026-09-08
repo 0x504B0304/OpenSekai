@@ -40,7 +40,14 @@ namespace Sekai
 			}
 
 			Vector2 center = GetLaneCenter(note.LaneStartF, note.LaneEndF);
-			Vector2 position = Vector2.LerpUnclamped(spawnPosition, center, progress);
+			Vector2 effectiveSpawnPos = spawnPosition;
+			if (note is NoteBase noteBase && noteBase.IsNegativeSpeed)
+			{
+				// 使用 spawnPosition 关于判定线的对称点作为负流速起点
+				effectiveSpawnPos = 2f * center - spawnPosition;
+				progress = Mathf.Min(progress, 1f);
+			}
+			Vector2 position = Vector2.LerpUnclamped(effectiveSpawnPos, center, progress);
 			return new Vector3(position.x, position.y, posZ);
 		}
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using DG.Tweening;
+using Sekai.CustomMusicScoreManager;
 using Sekai.UI;
 using UnityEngine;
 
@@ -32,6 +33,11 @@ namespace Sekai
 		protected override void OnInitComponent()
 		{
 			base.OnInitComponent();
+
+			// 不在此处启动录制，而是在游戏实际开始时启动（SoloLiveController.OnMusicStart）
+			// 这样可以避免录制加载场景的UI相机
+			// TryStartVideoGenerationRecording();
+
 			if (frontGroup != null)
 			{
 				frontGroup.alpha = 0f;
@@ -63,6 +69,41 @@ namespace Sekai
 			StartCoroutine(PlayStartWhiteOut());
 			StartTransition(OnFinishTransitionFadeOut);
 			StartCoroutine(CompleteGaugeAfterStartAnimation());
+		}
+
+		private void TryStartVideoGenerationRecording()
+		{
+			// Get boot data from UserDataManager
+			FreeLiveBootData bootData = UserDataManager.Instance.FreeLiveBootData;
+
+			if (bootData == null)
+			{
+				return;
+			}
+
+			// Check if this is a video generation mode boot data
+			if (bootData is VideoGenerationBootData videoGenData && videoGenData.IsVideoGenerationMode)
+			{
+				// Get score title from music data
+				string scoreTitle = bootData.MusicData?.Music?.title ?? $"Score_{bootData.MusicData?.Music?.id}_{bootData.MusicData?.DifficultyString}";
+
+				// Start video generation recording with default settings (1920x1080 @ 30fps)
+				bool success = VideoGenerationController.StartVideoGenerationRecording(
+					videoGenData,
+					scoreTitle,
+					1920,
+					1080,
+					30);
+
+				if (success)
+				{
+					Debug.Log("[ScreenLayerLiveLoading] Video generation recording started successfully.");
+				}
+				else
+				{
+					Debug.LogWarning("[ScreenLayerLiveLoading] Failed to start video generation recording.");
+				}
+			}
 		}
 
 		private IEnumerator PlayStartWhiteOut()

@@ -173,6 +173,10 @@ MSG_CHANGE_DAY,日付が更新されました。\nタイトルに戻ります。
 MSG_CHANGE_HIGH_SPEED_AT_TIMING,指定したタイミングでハイスピードを変更します。
 MSG_CHANGE_RATE_CERTAIN_OR_MORE_BY_POSTS_POSSIBLE,※変更率が{0}%以上で投稿が可能になります。
 MSG_CHANGE_TIME_SIGNATURE_AT_TIMING,指定したタイミングで譜面の拍子を変更します。
+MSG_INPUT_COLOR_HEX,色の16進数コードを入力してください(#を含む)。
+MSG_INVALID_COLOR_VALUE,色の値が不正です。
+MSG_SET_DECORATION_NOTE,このノーツを飾りに設定しますか？
+MSG_CANCEL_DECORATION_NOTE,このノーツの飾り設定を解除しますか？
 MSG_CHAPTER_EPISODE_TITLE,{0} {1}
 MSG_CHAPTER_EPISODE_TITLE2,{0} のストーリー
 MSG_CHAPTER_RANKING_REWARD_HEAD_LINE, のランキング報酬
@@ -979,6 +983,8 @@ MSG_REQUIRE_MEMBER_LV,メンバーLv.{0}以上が必要です。
 MSG_REREFLECT_PRODUCT_HOME,クリスタルショップにて受け取り可能な商品があります。
 MSG_RESET_AT_HOUR,{0}時にリセット
 MSG_RESTRICT_MULTILIVE,他のお客様に迷惑がかかる行為が検出されたため、\n複数プレイヤーによるライブ機能を一時制限させて頂きます。
+MSG_RESTORE_SCOPE,Please select the restore scope.
+MSG_RESTORE_ALL_CONFIRM,Are you sure you want to restore all backup?\nThis will overwrite current settings.
 MSG_REST_UNLOCK_STORY,第{0}話 解放まで あと
 MSG_REST_UNLOCK_STORY_BOTTOM,あと
 MSG_REST_UNLOCK_STORY_TOP,第{0}話 解放まで
@@ -2899,6 +2905,8 @@ WORD_QUANTIZE_FORMAT,{0}分音符
 WORD_QUANTIZE_RESULT_FORMAT,{0}分
 WORD_RANGE,範囲
 WORD_RANGE_SELECT,範囲選択
+RESTORE_SCORES,Restore scores only
+RESTORE_ALL,Restore all
 WORD_RANK,ランク
 WORD_RANKING,ランキング
 WORD_RANKMATCH,ランクマッチ

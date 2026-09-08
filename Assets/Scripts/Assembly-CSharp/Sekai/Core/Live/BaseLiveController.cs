@@ -115,7 +115,7 @@ namespace Sekai.Core.Live
 				return renderTextureSize;
 			}
 
-			// OpenSekai: live background baking must keep the current display aspect.
+			// OjskCommunity: live background baking must keep the current display aspect.
 			// Otherwise a 16:9 baked jacket texture is stretched on wide or narrow screens.
 			float screenAspect = (float)screenWidth / screenHeight;
 			int width = Mathf.Max(1, Mathf.RoundToInt(renderTextureSize.height * screenAspect));

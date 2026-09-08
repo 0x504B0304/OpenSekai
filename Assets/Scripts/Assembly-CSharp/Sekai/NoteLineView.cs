@@ -252,7 +252,7 @@ namespace Sekai
 			}
 
 			SetStatusValue(time, baseNote);
-			Color color = baseNote != null && baseNote.State == NoteState.Release ? ReleaseColor : PressColor;
+			Color color = GetNoteColor(baseNote);
 			for (int i = 0; i < meshDataCount - 1 && meshCount < PoolCount; i++)
 			{
 				int vertexIndex = meshCount * TrapezoidVertexCount;
@@ -261,6 +261,45 @@ namespace Sekai
 				UpdateUV(vertexIndex, i);
 				meshCount++;
 			}
+		}
+
+		/// <summary>
+		/// 获取note的实际渲染颜色
+		/// 优先使用自定义颜色（guideColor），否则使用默认类型颜色
+		/// </summary>
+		private Color GetNoteColor(INote baseNote)
+		{
+			// 默认颜色基于状态
+			Color defaultColor = baseNote != null && baseNote.State == NoteState.Release ? ReleaseColor : PressColor;
+
+			// 检查是否为Guide相关类型
+			if (baseNote == null)
+			{
+				return defaultColor;
+			}
+
+			// 检查是否为Guide类型（Guide, GuideEnd, GuideHidden）
+			if (baseNote.Category != NoteCategory.Guide &&
+				baseNote.Category != NoteCategory.GuideEnd &&
+				baseNote.Category != NoteCategory.GuideHidden)
+			{
+				return defaultColor;
+			}
+
+			// 尝试获取自定义颜色
+			if (baseNote is LongNote longNote)
+			{
+				string guideColor = longNote.guideColor;
+				if (!string.IsNullOrEmpty(guideColor))
+				{
+					if (UnityEngine.ColorUtility.TryParseHtmlString(guideColor, out Color customColor))
+					{
+						return customColor;
+					}
+				}
+			}
+
+			return defaultColor;
 		}
 
 		private void UpdateUV(int vertexIndex, int meshDataIndex)
@@ -403,7 +442,14 @@ namespace Sekai
 				float centerLane = Mathf.Lerp(startCenterLane, endCenterLane, centerProgress);
 				float width = Mathf.Lerp(startWidth, endWidth, centerProgress);
 				Vector2 lanePosition = GetLanePosition(centerLane);
-				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(LiveConfig.SpawnPosition, lanePosition, viewProgress);
+				// 根据流速正负选择不同的 spawnPosition（startNote 可能是 LongNote 本身，也可能是子音符）
+				bool isNegativeSpeed = startNoteBase.IsNegativeSpeed
+					|| (startNote.ParentNote is NoteBase parentNote && parentNote.IsNegativeSpeed);
+				Vector2 effectiveSpawnPos = isNegativeSpeed
+					? 2f * lanePosition - LiveConfig.SpawnPosition // 关于判定线对称的下方起点
+					: LiveConfig.SpawnPosition;
+				float clampedViewProgress = isNegativeSpeed ? Mathf.Min(viewProgress, 1f) : viewProgress;
+				Vector2 viewPosition = LiveUtility.EarlyVec2Lerp(effectiveSpawnPos, lanePosition, clampedViewProgress);
 				float halfWidth = viewProgress * (((width + 1f) * LiveConfig.widthX) - 0.1f) * 0.5f;
 
 				meshSettingBuffer[i] = new Setting

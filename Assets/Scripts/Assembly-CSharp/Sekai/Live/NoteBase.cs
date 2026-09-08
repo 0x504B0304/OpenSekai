@@ -329,6 +329,14 @@ namespace Sekai.Live
 			set;
 		}
 
+		public virtual bool IsDecoration
+		{
+			[CompilerGenerated]
+			get;
+			[CompilerGenerated]
+			set;
+		}
+
 		[JsonIgnore]
 		public virtual int Id
 		{
@@ -345,6 +353,12 @@ namespace Sekai.Live
 			[CompilerGenerated]
 			set;
 		}
+
+		/// <summary>
+		/// 标记音符是否使用负流速渲染（从屏幕下方飞入）
+		/// </summary>
+		[JsonIgnore]
+		public bool IsNegativeSpeed { get; set; }
 
 		public float offsetTime
 		{
@@ -400,6 +414,14 @@ namespace Sekai.Live
 			this.state = state;
 		}
 
+		/// <summary>
+		/// Set JudgeInfo for decoration notes to enable effect playback
+		/// </summary>
+		public void SetJudgeInfoForDecoration(NoteResult result)
+		{
+			JudgeInfo = (result, NoteResultDescription.None);
+		}
+
 		public virtual void SetParentNote(LongNote note)
 		{
 			parentNote = note;
@@ -427,6 +449,11 @@ namespace Sekai.Live
 		public virtual void SetSkip(bool skip)
 		{
 			IsSkip = skip;
+		}
+
+		public virtual void SetDecoration(bool decoration)
+		{
+			IsDecoration = decoration;
 		}
 
 		public virtual void Excute(MusicScoreInfo currentFrameInfo, float offsetTime)
@@ -457,7 +484,8 @@ namespace Sekai.Live
 			}
 
 			Progress = progress;
-			if (OffsetJudgeTime > LiveConfig.noteTypeJudgeData.JudgeTimeAfter)
+			// Decoration notes should not be marked as Last/Miss, they are auto-judged in LiveLogic
+			if (OffsetJudgeTime > LiveConfig.noteTypeJudgeData.JudgeTimeAfter && !IsDecoration)
 			{
 				State = NoteState.Last;
 			}

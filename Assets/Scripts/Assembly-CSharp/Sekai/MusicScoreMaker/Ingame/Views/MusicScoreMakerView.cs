@@ -153,6 +153,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private CustomButton _redoButton;
 
 		[SerializeField]
+		private CustomButton _saveButton;
+
+		[SerializeField]
+		private CustomButton _testPlayButton;
+
+		[SerializeField]
 		private UIPartsLeftTabList _leftTabList;
 
 		private static readonly IsEditRestrictedEvent IsEditRestrictedEventCache;
@@ -235,6 +241,30 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 		}
 
+		public CustomButton SaveButton
+		{
+			get
+			{
+				return _saveButton;
+			}
+		}
+
+		public CustomButton ExitButton
+		{
+			get
+			{
+				return _backButton;
+			}
+		}
+
+		public CustomButton TestPlayButton
+		{
+			get
+			{
+				return _testPlayButton;
+			}
+		}
+
 		[AsyncStateMachine(typeof(_003CSetup_003Ed__34))]
 		public UniTask Setup(CancellationToken cancellationToken, int musicId = 0)
 		{
@@ -249,7 +279,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			SetScoreDisplayScale();
 
 			// The original value comes from ClientConfig.MusicScoreMaker.LongNoteLinePoolCount.
-			// ClientConfig is not restored in OpenSekai yet, so keep the original fallback count.
+			// ClientConfig is not restored in OjskCommunity yet, so keep the original fallback count.
 			const int longNoteLinePoolCount = 100;
 			if (_musicScorePreview != null)
 			{
@@ -580,19 +610,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private void Update()
 		{
 			_presenterUpdateAction?.Invoke();
-#if UNITY_STANDALONE || UNITY_EDITOR
-			if (!Application.isFocused
-				|| !(UnityEngine.Input.GetKey(KeyCode.LeftControl) || UnityEngine.Input.GetKey(KeyCode.RightControl))
-				|| UnityEngine.Input.GetKey(KeyCode.LeftAlt) || UnityEngine.Input.GetKey(KeyCode.RightAlt)
-				|| UnityEngine.Input.GetMouseButton(0) || UnityEngine.Input.GetMouseButton(1)
-				|| UnityEngine.Input.GetMouseButton(2) || UnityEngine.Input.touchCount > 0) return;
-			bool shift = UnityEngine.Input.GetKey(KeyCode.LeftShift) || UnityEngine.Input.GetKey(KeyCode.RightShift);
-			if (UnityEngine.Input.GetKeyDown(KeyCode.Z)) TryHandleHistoryShortcut(shift);
-			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.S)) TryHandleSaveShortcut();
-			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.C)) TryHandleClipboardShortcut(KeyCode.C);
-			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.X)) TryHandleClipboardShortcut(KeyCode.X);
-			else if (!shift && UnityEngine.Input.GetKeyDown(KeyCode.V)) TryHandleClipboardShortcut(KeyCode.V);
-#endif
+			// 处理键盘快捷键（仅Windows平台）
+			MusicScoreMakerKeyboardHandler.HandleKeyboardInput();
 		}
 
 		private bool TryHandleHistoryShortcut(bool redo)
@@ -642,7 +661,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			if (selected != null && (selected.GetComponentInParent<TMPro.TMP_InputField>() != null
 				|| selected.GetComponentInParent<UnityEngine.UI.InputField>() != null)) return false;
 			if (ScreenManager.ExistsInstance && ScreenManager.Instance.ExistsDialog()) return false;
-			foreach (var subWindow in FindObjectsOfType<SubWindowSlideAnimationController>(true))
+			foreach (SubWindowSlideAnimationController subWindow in FindObjectsOfType<SubWindowSlideAnimationController>(true))
 				if (subWindow != null && subWindow.gameObject.activeInHierarchy) return false;
 
 			return true;

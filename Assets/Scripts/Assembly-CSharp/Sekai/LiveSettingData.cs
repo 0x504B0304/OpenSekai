@@ -24,6 +24,22 @@ namespace Sekai
 
 		public const int MusicInfoDisplayModeCustomScore = 1;
 
+		public const int MusicInfoDisplayModeSkip = 2;
+
+		public const int AutoFakePerfectModeAuto = 0;
+
+		public const int AutoFakePerfectModeFakePerfect = 1;
+
+		public const int AutoResultAnimationNone = 0;
+
+		public const int AutoResultAnimationAllPerfect = 1;
+
+		public const int AutoResultAnimationFullCombo = 2;
+
+		public const int AutoResultAnimationClear = 3;
+
+		public const int AutoResultAnimationFinish = 4;
+
 		public const int CustomMusicScoreBackgroundModeJacket = 0;
 
 		public const int CustomMusicScoreBackgroundMode2DMV = 1;
@@ -68,8 +84,17 @@ namespace Sekai
 		[Key("GuideAlpha")]
 		public float GuideAlpha { get; set; }
 
+		[Key("JudgeLineAlpha")]
+		public float JudgeLineAlpha { get; set; }
+
 		[Key("NoteSkinIndex")]
 		public int NoteSkinIndex { get; set; }
+
+		[Key("AutoSaveIntervalIndex")]
+		public int AutoSaveIntervalIndex { get; set; }
+
+		[Key("ScoreMakerPreviewModeIndex")]
+		public int ScoreMakerPreviewModeIndex { get; set; }
 
 		[Key("NoteSeIndex")]
 		public int NoteSeIndex { get; set; }
@@ -148,6 +173,15 @@ namespace Sekai
 		[Key("CustomMusicScoreLiveBackgroundMode")]
 		public int? CustomMusicScoreLiveBackgroundMode { get; set; }
 
+		[Key("CustomMusicScoreAutoFakePerfectMode")]
+		public int? CustomMusicScoreAutoFakePerfectMode { get; set; }
+
+		[Key("CustomMusicScoreAutoResultAnimation")]
+		public int? CustomMusicScoreAutoResultAnimation { get; set; }
+
+		[Key("UseMaimaiMusicInfoSe")]
+		public bool UseMaimaiMusicInfoSe { get; set; }
+
 		[IgnoreMember]
 		[JsonIgnore]
 		public bool UsesCustomMusicScoreMusicInfoDisplay
@@ -155,6 +189,16 @@ namespace Sekai
 			get
 			{
 				return (CustomMusicScoreMusicInfoDisplayMode ?? MusicInfoDisplayModeCustomScore) == MusicInfoDisplayModeCustomScore;
+			}
+		}
+
+		[IgnoreMember]
+		[JsonIgnore]
+		public bool SkipsCustomMusicScoreMusicInfo
+		{
+			get
+			{
+				return (CustomMusicScoreMusicInfoDisplayMode ?? MusicInfoDisplayModeCustomScore) == MusicInfoDisplayModeSkip;
 			}
 		}
 
@@ -168,11 +212,34 @@ namespace Sekai
 			}
 		}
 
+		[IgnoreMember]
+		[JsonIgnore]
+		public bool UsesAutoFakePerfectMode
+		{
+			get
+			{
+				return (CustomMusicScoreAutoFakePerfectMode ?? AutoFakePerfectModeAuto) == AutoFakePerfectModeFakePerfect;
+			}
+		}
+
+		[IgnoreMember]
+		[JsonIgnore]
+		public int AutoResultAnimationMode
+		{
+			get
+			{
+				return CustomMusicScoreAutoResultAnimation ?? AutoResultAnimationNone;
+			}
+		}
+
 		public LiveSettingData()
 		{
 			ShowsRoomId = true;
 			NoteAlpha = 1f;
 			GuideAlpha = 0.6f;
+			JudgeLineAlpha = 1f;
+			AutoSaveIntervalIndex = 0;
+			ScoreMakerPreviewModeIndex = 0;
 			CustomRoomIsDisplayPlayerInfo = true;
 			UseCutIn = true;
 			LiveMode = LiveModeType.Default3D;
@@ -190,6 +257,7 @@ namespace Sekai
 			LaneTransparent = 1f;
 			CustomMusicScoreMusicInfoDisplayMode = MusicInfoDisplayModeCustomScore;
 			CustomMusicScoreLiveBackgroundMode = CustomMusicScoreBackgroundMode2DMV;
+			UseMaimaiMusicInfoSe = false;
 		}
 
 		public static LiveSettingData LoadFromStorage()
@@ -262,6 +330,11 @@ namespace Sekai
 		public float GetGuideAlpha()
 		{
 			return GuideAlpha == 0f ? 0.6f : GuideAlpha;
+		}
+
+		public float GetJudgeLineAlpha()
+		{
+			return JudgeLineAlpha == 0f ? 1f : JudgeLineAlpha;
 		}
 
 		public void SetNoteShowRate(float optionValue)

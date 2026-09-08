@@ -13,7 +13,7 @@ namespace Sekai
 		protected override void Load()
 		{
 			// Original tries to load the last live result background from AssetManager.
-			// OpenSekai can enter MusicScoreMaker directly without live boot data, so keep the default Resources path.
+			// OjskCommunity can enter MusicScoreMaker directly without live boot data, so keep the default Resources path.
 			base.Load();
 		}
 

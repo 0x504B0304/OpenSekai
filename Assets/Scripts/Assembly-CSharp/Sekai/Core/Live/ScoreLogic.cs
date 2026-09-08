@@ -13,9 +13,39 @@ namespace Sekai.Core.Live
 
 		public int BaseNoteScore { get; set; }
 
-		public bool IsPerfectCombo => score.badCount == 0 && score.missCount == 0 && score.goodCount == 0;
+		public bool IsPerfectCombo
+		{
+			get
+			{
+				if (score.badCount != 0 || score.missCount != 0 || score.goodCount != 0)
+				{
+					return false;
+				}
+				// If all notes are Auto, it's not a perfect combo
+				if (score.autoCount == score.totalComboCount)
+				{
+					return false;
+				}
+				return true;
+			}
+		}
 
-		public bool IsAllPerfectCombo => score.IsAllPerfect;
+		public bool IsAllPerfectCombo
+		{
+			get
+			{
+				if (score.badCount != 0 || score.missCount != 0 || score.goodCount != 0 || score.greatCount != 0)
+				{
+					return false;
+				}
+				// If all notes are Auto, it's not an all perfect combo
+				if (score.autoCount == score.totalComboCount)
+				{
+					return false;
+				}
+				return score.IsAllPerfect;
+			}
+		}
 
 		public ScoreLogic(LiveBundleBuildData data)
 		{
@@ -45,12 +75,20 @@ namespace Sekai.Core.Live
 
 		public virtual void UpdateCombo(NoteBase note)
 		{
-			if (note == null || note.Result == NoteResult.None)
+			// Decoration notes are auto-judged and should not affect combo
+			if (note == null || note.Result == NoteResult.None || note.IsDecoration)
 			{
 				return;
 			}
 
-			score.combo = note.Result < NoteResult.Great ? 0 : score.combo + 1;
+			NoteResult effectiveResult = note.Result;
+			// In Fake Perfect mode, treat Auto as Perfect for combo counting
+			if (effectiveResult == NoteResult.Auto && LiveSettingData.LoadFromStorage()?.UsesAutoFakePerfectMode == true)
+			{
+				effectiveResult = NoteResult.Perfect;
+			}
+
+			score.combo = effectiveResult < NoteResult.Great ? 0 : score.combo + 1;
 			if (score.combo > score.maxCombo)
 			{
 				score.maxCombo = score.combo;
@@ -59,6 +97,12 @@ namespace Sekai.Core.Live
 
 		public virtual void UpdateNoteResult(NoteBase note)
 		{
+			// Decoration notes are auto-judged and should not affect score counts
+			if (note != null && note.IsDecoration)
+			{
+				return;
+			}
+
 			switch (note?.Result)
 			{
 				case NoteResult.JustPerfect:
@@ -101,7 +145,8 @@ namespace Sekai.Core.Live
 
 		public virtual int CalculateAddScore(NoteBase note, float factor = 1f)
 		{
-			if (note == null)
+			// Decoration notes do not contribute to score
+			if (note == null || note.IsDecoration)
 			{
 				return 0;
 			}
@@ -143,7 +188,7 @@ namespace Sekai.Core.Live
 				return;
 			}
 
-			// OpenSekai fallback for custom scores: keep rank thresholds aligned with ScoreGaugeCalculator.Create(1000000).
+			// OjskCommunity fallback for custom scores: keep rank thresholds aligned with ScoreGaugeCalculator.Create(1000000).
 			int rankS = UnityEngine.Mathf.FloorToInt(ScoreGaugeCalculator.RankRateS * DefaultTotalScore);
 			int rankA = UnityEngine.Mathf.FloorToInt(ScoreGaugeCalculator.RankRateA * DefaultTotalScore);
 			int rankB = UnityEngine.Mathf.FloorToInt(ScoreGaugeCalculator.RankRateB * DefaultTotalScore);

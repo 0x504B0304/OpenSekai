@@ -43,24 +43,44 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 		}
 
 		private static NoteAndComboCountInfo CalculateFromNoteList(MusicScoreMakerData data)
+	{
+		NoteAndComboCountInfo info = default;
+		List<MusicScoreNoteBase> noteList = GetMakerNoteList(data);
+		if (noteList == null)
 		{
-			NoteAndComboCountInfo info = default;
-			List<MusicScoreNoteBase> noteList = GetMakerNoteList(data);
-			if (noteList == null)
+			return info;
+		}
+
+		Dictionary<int, MusicScoreNoteBase> noteIdCache = data?.GetNoteIdCacheOrRebuild();
+		foreach (MusicScoreNoteBase note in noteList)
+		{
+			if (note == null)
 			{
-				return info;
+				continue;
 			}
 
-			foreach (MusicScoreNoteBase note in noteList)
+			// 检查当前note的isDecoration属性
+			bool isDecoration = note.isDecoration;
+
+			// 如果当前note是长条的连接note（有previousConnectionId），检查起始note的isDecoration
+			if (!isDecoration && note.previousConnectionId != -1 && noteIdCache != null)
 			{
-				if (note != null)
+				MusicScoreNoteBase startNote = note.FindStartNote(noteIdCache);
+				if (startNote != null)
 				{
-					UpdateCountInfo(ref info, note.category);
+					isDecoration = startNote.isDecoration;
 				}
 			}
 
-			return info;
+			// Decoration notes do not count toward combo
+			if (!isDecoration)
+			{
+				UpdateCountInfo(ref info, note.category);
+			}
 		}
+
+		return info;
+	}
 
 		private static void UpdateCountInfo(ref NoteAndComboCountInfo info, NoteCategory category)
 		{
@@ -110,7 +130,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Models
 
 				foreach (NoteBase childNote in note.NoteList)
 				{
-					if (childNote != null && IsComboEnabled(childNote))
+					// Decoration notes do not count toward combo
+					if (childNote != null && !childNote.IsDecoration && IsComboEnabled(childNote))
 					{
 						UpdateCountInfo(ref info, childNote.Category);
 					}
