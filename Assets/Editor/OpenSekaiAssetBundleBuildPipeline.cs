@@ -43,39 +43,50 @@ namespace Sekai.EditorTools
 				throw new BuildFailedException($"Failed to switch the active build target to {target}.");
 			}
 
-			BuildForTarget(target, true);
+			PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
+			EditorUserBuildSettings.development = false;
+			string[] originalCompilerArguments = ConfigurePortableCompilerPaths(NamedBuildTarget.Standalone);
 
-			string[] scenes = EditorBuildSettings.scenes
-				.Where(scene => scene.enabled)
-				.Select(scene => scene.path)
-				.ToArray();
-			if (scenes.Length == 0)
+			try
 			{
-				throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+				BuildForTarget(target, true);
+
+				string[] scenes = EditorBuildSettings.scenes
+					.Where(scene => scene.enabled)
+					.Select(scene => scene.path)
+					.ToArray();
+				if (scenes.Length == 0)
+				{
+					throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+				}
+
+				string buildRoot = GetAbsoluteProjectPath("Builds");
+				string outputDirectory = GetAbsoluteProjectPath(Environment.GetEnvironmentVariable("OPENSEKAI_WINDOWS_OUTPUT") ?? WindowsBuildDirectoryRelativePath);
+				RecreateOwnedDirectory(outputDirectory, buildRoot);
+				string outputPath = Path.Combine(outputDirectory, WindowsExecutableName);
+
+				BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+				{
+					scenes = scenes,
+					locationPathName = outputPath,
+					target = target,
+					options = BuildOptions.None
+				});
+
+				if (report.summary.result != BuildResult.Succeeded)
+				{
+					throw new BuildFailedException(
+						$"Windows Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+				}
+
+				Debug.Log(
+					$"OpenSekai Windows Player built. output={outputPath}, " +
+					$"size={report.summary.totalSize}, duration={report.summary.totalTime}");
 			}
-
-			string buildRoot = GetAbsoluteProjectPath("Builds");
-			string outputDirectory = GetAbsoluteProjectPath(Environment.GetEnvironmentVariable("OPENSEKAI_WINDOWS_OUTPUT") ?? WindowsBuildDirectoryRelativePath);
-			RecreateOwnedDirectory(outputDirectory, buildRoot);
-			string outputPath = Path.Combine(outputDirectory, WindowsExecutableName);
-
-			BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+			finally
 			{
-				scenes = scenes,
-				locationPathName = outputPath,
-				target = target,
-				options = BuildOptions.None
-			});
-
-			if (report.summary.result != BuildResult.Succeeded)
-			{
-				throw new BuildFailedException(
-					$"Windows Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+				PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Standalone, originalCompilerArguments);
 			}
-
-			Debug.Log(
-				$"OpenSekai Windows Player built. output={outputPath}, " +
-				$"size={report.summary.totalSize}, duration={report.summary.totalTime}");
 		}
 
 		public static void BuildAndroidPlayer()
@@ -94,27 +105,41 @@ namespace Sekai.EditorTools
 			AndroidExternalToolsSettings.ndkRootPath = Path.Combine(androidPlayerRoot, "NDK");
 #endif
 
-			BuildForTarget(target, true);
-			string[] scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
-			if (scenes.Length == 0) throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
-
-			string buildRoot = GetAbsoluteProjectPath("Builds");
-			string outputDirectory = GetAbsoluteProjectPath(AndroidBuildDirectoryRelativePath);
-			RecreateOwnedDirectory(outputDirectory, buildRoot);
-			string outputPath = Path.Combine(outputDirectory, AndroidPackageName);
+			PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+			PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+			EditorUserBuildSettings.development = false;
 			EditorUserBuildSettings.buildAppBundle = false;
-			BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+			string[] originalCompilerArguments = ConfigurePortableCompilerPaths(NamedBuildTarget.Android);
+			string originalIl2CppArguments = ConfigurePortableIl2CppPaths();
+
+			try
 			{
-				scenes = scenes,
-				locationPathName = outputPath,
-				target = target,
-				options = BuildOptions.None
-			});
-			if (report.summary.result != BuildResult.Succeeded)
-			{
-				throw new BuildFailedException($"Android Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+				BuildForTarget(target, true);
+				string[] scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
+				if (scenes.Length == 0) throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+
+				string buildRoot = GetAbsoluteProjectPath("Builds");
+				string outputDirectory = GetAbsoluteProjectPath(AndroidBuildDirectoryRelativePath);
+				RecreateOwnedDirectory(outputDirectory, buildRoot);
+				string outputPath = Path.Combine(outputDirectory, AndroidPackageName);
+				BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+				{
+					scenes = scenes,
+					locationPathName = outputPath,
+					target = target,
+					options = BuildOptions.None
+				});
+				if (report.summary.result != BuildResult.Succeeded)
+				{
+					throw new BuildFailedException($"Android Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+				}
+				Debug.Log($"OpenSekai Android Player built. output={outputPath}, size={report.summary.totalSize}, duration={report.summary.totalTime}");
 			}
-			Debug.Log($"OpenSekai Android Player built. output={outputPath}, size={report.summary.totalSize}, duration={report.summary.totalTime}");
+			finally
+			{
+				PlayerSettings.SetAdditionalIl2CppArgs(originalIl2CppArguments);
+				PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Android, originalCompilerArguments);
+			}
 		}
 
 		public static bool BuildForTarget(BuildTarget target, bool failWhenNoBundles)
@@ -306,6 +331,40 @@ namespace Sekai.EditorTools
 		private static string GetProjectRoot()
 		{
 			return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+		}
+
+		private static string[] ConfigurePortableCompilerPaths(NamedBuildTarget target)
+		{
+			string[] originalArguments = PlayerSettings.GetAdditionalCompilerArguments(target);
+			string pathMapArgument = $"-pathmap:{GetProjectRoot()}=OpenSekai";
+			string[] arguments = originalArguments
+				.Where(argument => !argument.StartsWith("-pathmap:", StringComparison.OrdinalIgnoreCase)
+					&& !argument.StartsWith("/pathmap:", StringComparison.OrdinalIgnoreCase))
+				.Append(pathMapArgument)
+				.ToArray();
+			PlayerSettings.SetAdditionalCompilerArguments(target, arguments);
+			return originalArguments;
+		}
+
+		private static string ConfigurePortableIl2CppPaths()
+		{
+			string originalArguments = PlayerSettings.GetAdditionalIl2CppArgs();
+			DirectoryInfo editorDirectory = Directory.GetParent(EditorApplication.applicationPath);
+			if (editorDirectory?.Parent == null)
+			{
+				throw new BuildFailedException("Unable to resolve the Unity installation directory.");
+			}
+
+			string projectRoot = GetProjectRoot().Replace('\\', '/');
+			string unityRoot = editorDirectory.Parent.FullName.Replace('\\', '/');
+			string portableArguments =
+				$"--compiler-flags=\"-ffile-prefix-map={projectRoot}=OpenSekai\" " +
+				$"--compiler-flags=\"-ffile-prefix-map={unityRoot}=Unity\"";
+			PlayerSettings.SetAdditionalIl2CppArgs(
+				string.IsNullOrWhiteSpace(originalArguments)
+					? portableArguments
+					: $"{originalArguments} {portableArguments}");
+			return originalArguments;
 		}
 
 		private static void RecreateOwnedDirectory(string path, string expectedRoot)
