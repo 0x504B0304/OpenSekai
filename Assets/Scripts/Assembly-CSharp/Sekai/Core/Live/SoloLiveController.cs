@@ -10,6 +10,7 @@ namespace Sekai.Core.Live
 		private bool isTestPlayFinishedCalled;
 		private Coroutine finishCoroutine;
 		private Coroutine resumeCoroutine;
+		private bool pauseWhenReady;
 		private bool playHistoryRecorded;
 		private LiveViewBase[] liveViews;
 		private LiveLogic liveLogic;
@@ -40,6 +41,7 @@ namespace Sekai.Core.Live
 			LiveTransitioner.SafeFinish(null, null);
 			base.OnMusicStart();
 			LiveViewExt.MusicStart(liveViews, currentAudioLatencyMusicTimeMs);
+			if (pauseWhenReady || IsPause) SoundManager.Instance.PauseIngame(currentMusicTimeMs);
 		}
 
 		protected override void OnRhythmGameStart()
@@ -47,6 +49,24 @@ namespace Sekai.Core.Live
 			LiveViewExt.RhythmGameStart(liveViews);
 			base.OnRhythmGameStart();
 			liveLogic?.RefreshInput();
+			if (pauseWhenReady || IsPause)
+			{
+				pauseWhenReady = false;
+				OnPause();
+			}
+		}
+
+		protected override void OnSystemPause()
+		{
+			if (!IsPause || IsExit) return;
+			if (state == LiveControllerState.None)
+			{
+				// Loading can finish after the window regains focus. Still require an explicit resume.
+				pauseWhenReady = true;
+				SoundManager.Instance.PauseIngame(currentMusicTimeMs);
+				return;
+			}
+			OnPause();
 		}
 
 		protected override void OnUpdate()
@@ -79,6 +99,7 @@ namespace Sekai.Core.Live
 		{
 			if ((state == LiveControllerState.Playing || state == LiveControllerState.ResumeCountDown) && result == 0)
 			{
+				CancelResumeCountdown();
 				state = LiveControllerState.Pause;
 				SoundManager.Instance.PauseIngame(currentMusicTimeMs);
 				LiveViewExt.Pause(liveViews);
@@ -112,6 +133,7 @@ namespace Sekai.Core.Live
 				return;
 			}
 
+			CancelResumeCountdown();
 			state = LiveControllerState.Pause;
 			SoundManager.Instance.PauseIngame(currentMusicTimeMs);
 			LiveViewExt.Pause(liveViews);
@@ -119,7 +141,7 @@ namespace Sekai.Core.Live
 
 		protected override void OnResume()
 		{
-			if (state != LiveControllerState.Pause)
+			if (state != LiveControllerState.Pause || IsPause)
 			{
 				return;
 			}
@@ -127,16 +149,13 @@ namespace Sekai.Core.Live
 			state = LiveControllerState.ResumeCountDown;
 			liveOutUIController?.Destroy();
 			LiveViewExt.Countdown(liveViews);
-			if (resumeCoroutine != null)
-			{
-				StopCoroutine(resumeCoroutine);
-			}
+			CancelResumeCountdown();
 			resumeCoroutine = StartCoroutine(ResumeCoroutine());
 		}
 
 		public void ResumeNoCountDown()
 		{
-			if (state != LiveControllerState.Pause)
+			if (state != LiveControllerState.Pause || IsPause)
 			{
 				return;
 			}
@@ -156,6 +175,7 @@ namespace Sekai.Core.Live
 
 		protected override void OnRetry()
 		{
+			CancelResumeCountdown();
 			liveOutUIController?.Destroy();
 			SoundManager.Instance.StopIngame();
 			isTestPlayFinishedCalled = false;
@@ -227,10 +247,22 @@ namespace Sekai.Core.Live
 		{
 			liveLogic?.RefreshInput();
 			yield return new WaitForSeconds(3f);
+			if (state != LiveControllerState.ResumeCountDown || IsPause || IsExit)
+			{
+				resumeCoroutine = null;
+				yield break;
+			}
 			SoundManager.Instance.ResumeIngame(currentMusicTimeMs);
 			state = LiveControllerState.Playing;
 			LiveViewExt.Resume(liveViews, currentAudioLatencyMusicTimeMs);
 			SoundManager.Instance.SetAudioSyncedUnityTimer(cueId);
+			resumeCoroutine = null;
+		}
+
+		private void CancelResumeCountdown()
+		{
+			if (resumeCoroutine == null) return;
+			StopCoroutine(resumeCoroutine);
 			resumeCoroutine = null;
 		}
 
@@ -334,6 +366,7 @@ namespace Sekai.Core.Live
 
 		protected override void OnExit()
 		{
+			CancelResumeCountdown();
 			LiveViewExt.Finish3D(liveViews);
 			LiveViewExt.OnUnload(liveViews);
 			MenuScreenType? returnScreenType = (BootData as FreeLiveBootData)?.ReturnScreenType;

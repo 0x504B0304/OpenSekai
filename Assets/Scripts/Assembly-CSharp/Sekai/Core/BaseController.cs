@@ -6,6 +6,8 @@ namespace Sekai.Core
 	{
 		private bool isExit;
 		private bool isPause;
+		private bool hasApplicationFocus = true;
+		private bool isApplicationPaused;
 		private bool isQuitting;
 
 		protected bool IsExit => isExit;
@@ -34,12 +36,14 @@ namespace Sekai.Core
 
 		protected virtual void OnApplicationFocus(bool hasFocus)
 		{
-			SetSystemPause(!hasFocus);
+			hasApplicationFocus = hasFocus;
+			SetSystemPause(isApplicationPaused || !hasApplicationFocus);
 		}
 
 		protected virtual void OnApplicationPause(bool pauseStatus)
 		{
-			SetSystemPause(pauseStatus);
+			isApplicationPaused = pauseStatus;
+			SetSystemPause(isApplicationPaused || !hasApplicationFocus);
 		}
 
 		public void Exit()
