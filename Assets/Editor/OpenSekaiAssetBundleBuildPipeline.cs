@@ -9,6 +9,9 @@ using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
+#if UNITY_ANDROID
+using UnityEditor.Android;
+#endif
 
 namespace Sekai.EditorTools
 {
@@ -22,6 +25,8 @@ namespace Sekai.EditorTools
 		private const string TempOutputRelativePath = "Library/OpenSekaiAssetBundles";
 		private const string WindowsBuildDirectoryRelativePath = "Builds/Windows";
 		private const string WindowsExecutableName = "OpenSekai.exe";
+		private const string AndroidBuildDirectoryRelativePath = "Builds/Android";
+		private const string AndroidPackageName = "OpenSekai.apk";
 
 		[MenuItem(MenuPath)]
 		public static void BuildForActiveTargetMenu()
@@ -50,7 +55,7 @@ namespace Sekai.EditorTools
 			}
 
 			string buildRoot = GetAbsoluteProjectPath("Builds");
-			string outputDirectory = GetAbsoluteProjectPath(WindowsBuildDirectoryRelativePath);
+			string outputDirectory = GetAbsoluteProjectPath(Environment.GetEnvironmentVariable("OPENSEKAI_WINDOWS_OUTPUT") ?? WindowsBuildDirectoryRelativePath);
 			RecreateOwnedDirectory(outputDirectory, buildRoot);
 			string outputPath = Path.Combine(outputDirectory, WindowsExecutableName);
 
@@ -71,6 +76,45 @@ namespace Sekai.EditorTools
 			Debug.Log(
 				$"OpenSekai Windows Player built. output={outputPath}, " +
 				$"size={report.summary.totalSize}, duration={report.summary.totalTime}");
+		}
+
+		public static void BuildAndroidPlayer()
+		{
+			const BuildTarget target = BuildTarget.Android;
+			if (EditorUserBuildSettings.activeBuildTarget != target &&
+				!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, target))
+			{
+				throw new BuildFailedException($"Failed to switch the active build target to {target}.");
+			}
+
+#if UNITY_ANDROID
+			string androidPlayerRoot = Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines", "AndroidPlayer");
+			AndroidExternalToolsSettings.jdkRootPath = Path.Combine(androidPlayerRoot, "OpenJDK");
+			AndroidExternalToolsSettings.sdkRootPath = Path.Combine(androidPlayerRoot, "SDK");
+			AndroidExternalToolsSettings.ndkRootPath = Path.Combine(androidPlayerRoot, "NDK");
+#endif
+
+			BuildForTarget(target, true);
+			string[] scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
+			if (scenes.Length == 0) throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+
+			string buildRoot = GetAbsoluteProjectPath("Builds");
+			string outputDirectory = GetAbsoluteProjectPath(AndroidBuildDirectoryRelativePath);
+			RecreateOwnedDirectory(outputDirectory, buildRoot);
+			string outputPath = Path.Combine(outputDirectory, AndroidPackageName);
+			EditorUserBuildSettings.buildAppBundle = false;
+			BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+			{
+				scenes = scenes,
+				locationPathName = outputPath,
+				target = target,
+				options = BuildOptions.None
+			});
+			if (report.summary.result != BuildResult.Succeeded)
+			{
+				throw new BuildFailedException($"Android Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+			}
+			Debug.Log($"OpenSekai Android Player built. output={outputPath}, size={report.summary.totalSize}, duration={report.summary.totalTime}");
 		}
 
 		public static bool BuildForTarget(BuildTarget target, bool failWhenNoBundles)
