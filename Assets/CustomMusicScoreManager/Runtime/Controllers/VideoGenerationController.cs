@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.IO;
 using UnityEngine;
 using Sekai;
@@ -392,7 +391,7 @@ namespace Sekai.CustomMusicScoreManager
 		/// <summary>
 		/// 执行失败流程
 		/// 按顺序执行：结束Live -> 返回首页 -> 显示对话框 -> 清理资源
-		/// 使用协程延迟显示对话框，等待ScreenManager初始化
+		/// 提示窗口独立于场景，切换到首页后仍然可见。
 		/// </summary>
 		private void ExecuteFailureFlow(string reason)
 		{
@@ -404,10 +403,10 @@ namespace Sekai.CustomMusicScoreManager
 			// SubTask 10.3: 使用ScreenManager返回主页MenuScreenType.MusicScoreMakerTop
 			ReturnToHomePage();
 
-			// 使用协程延迟显示失败对话框，等待ScreenManager准备好
-			StartCoroutine(ShowFailureDialogDelayed());
+			// 独立的持久化窗口不依赖正在退出的 Live 场景。
+			VideoCompletionHandler.Instance.ShowRecordingError(reason);
 
-			// SubTask 10.5: 清理临时录屏文件和缓存
+			// 释放录制资源，保留磁盘上的录制数据。
 			CleanupRecordingResources();
 
 			// 清除录制状态
@@ -415,26 +414,6 @@ namespace Sekai.CustomMusicScoreManager
 			_isFailureHandled = true;
 
 			Debug.Log("[VideoGenerationController] 失败流程执行完成");
-		}
-
-		/// <summary>
-		/// 延迟显示失败对话框，等待ScreenManager初始化
-		/// </summary>
-		private IEnumerator ShowFailureDialogDelayed()
-		{
-			// 等待ScreenManager准备好（最多等待5秒）
-			float maxWaitTime = 5f;
-			float elapsedTime = 0f;
-
-			while (ScreenManager.Instance == null && elapsedTime < maxWaitTime)
-			{
-				yield return new WaitForSeconds(0.5f);
-				elapsedTime += 0.5f;
-				Debug.Log($"[VideoGenerationController] 等待ScreenManager初始化... ({elapsedTime}s)");
-			}
-
-			// 显示失败对话框
-			ShowFailureDialog();
 		}
 
 		/// <summary>
@@ -488,54 +467,13 @@ namespace Sekai.CustomMusicScoreManager
 		}
 
 		/// <summary>
-		/// SubTask 10.4: 显示失败对话框"录屏失败"
-		/// </summary>
-		private void ShowFailureDialog()
-		{
-			try
-			{
-				if (ScreenManager.Instance != null)
-				{
-					Debug.Log("[VideoGenerationController] 显示录屏失败对话框");
-
-					// 使用ScreenManager显示单按钮对话框
-					ScreenManager.Instance.Show1ButtonDialog<Common1ButtonDialog>(
-						DialogType.Common1ButtonDialog,
-						null,           // titleKey (无标题)
-						"录屏失败",      // messageBodyKey (显示内容)
-						"确认",          // okButtonLabelKey (按钮文本)
-						() =>
-						{
-							Debug.Log("[VideoGenerationController] 用户确认录屏失败对话框");
-						},
-						DisplayLayerType.Layer_Dialog,
-						DialogSize.Manual,
-						true
-					);
-				}
-				else
-				{
-					// ScreenManager超时仍未初始化，使用Toast提示或日志记录
-					Debug.LogWarning("[VideoGenerationController] ScreenManager超时未初始化，录屏失败信息已记录到日志");
-
-					// 尝试使用Toast提示（如果Toast系统可用）
-					// 注意：这里暂时只记录日志，因为Toast系统可能同样依赖ScreenManager
-				}
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[VideoGenerationController] ShowFailureDialog异常: {ex.Message}\n{ex.StackTrace}");
-			}
-		}
-
-		/// <summary>
-		/// SubTask 10.5: 清理临时录屏文件和缓存
+		/// 释放录制资源并清除状态，保留失败的录制文件。
 		/// </summary>
 		private void CleanupRecordingResources()
 		{
 			try
 			{
-				Debug.Log("[VideoGenerationController] 清理临时录屏文件和缓存");
+				Debug.Log("[VideoGenerationController] 释放录制资源");
 
 				// 调用VideoGenerationService取消录制
 				if (VideoGenerationService.Instance != null)
@@ -543,48 +481,12 @@ namespace Sekai.CustomMusicScoreManager
 					VideoGenerationService.Instance.CancelRecording();
 				}
 
-				// 清理临时目录
-				CleanupTempDirectories();
-
 				// 清除录制数据
 				ClearRecordingData();
 			}
 			catch (Exception ex)
 			{
 				Debug.LogError($"[VideoGenerationController] CleanupRecordingResources异常: {ex.Message}\n{ex.StackTrace}");
-			}
-		}
-
-		/// <summary>
-		/// 清理所有临时录屏目录
-		/// </summary>
-		private void CleanupTempDirectories()
-		{
-			try
-			{
-				string tempCachePath = Application.temporaryCachePath;
-
-				// 清理VideoGeneration临时目录
-				string videoGenerationPath = Path.Combine(tempCachePath, "VideoGeneration");
-				if (Directory.Exists(videoGenerationPath))
-				{
-					Debug.Log($"[VideoGenerationController] 清理临时目录: {videoGenerationPath}");
-					Directory.Delete(videoGenerationPath, true);
-				}
-
-				// 清理VideoRecordings临时目录
-				string videoRecordingsPath = Path.Combine(tempCachePath, "VideoRecordings");
-				if (Directory.Exists(videoRecordingsPath))
-				{
-					Debug.Log($"[VideoGenerationController] 清理临时目录: {videoRecordingsPath}");
-					Directory.Delete(videoRecordingsPath, true);
-				}
-
-				Debug.Log("[VideoGenerationController] 临时目录清理完成");
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[VideoGenerationController] CleanupTempDirectories异常: {ex.Message}\n{ex.StackTrace}");
 			}
 		}
 
@@ -600,7 +502,6 @@ namespace Sekai.CustomMusicScoreManager
 					VideoGenerationService.Instance.CancelRecording();
 				}
 
-				CleanupTempDirectories();
 				ClearRecordingData();
 			}
 			catch (Exception ex)

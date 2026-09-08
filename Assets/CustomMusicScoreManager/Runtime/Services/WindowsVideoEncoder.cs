@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -18,6 +20,7 @@ namespace Sekai.CustomMusicScoreManager
 
 		public override string EncoderName => "Windows Video Encoder";
 		public override bool IsAvailable => CheckFFmpegAvailable();
+		public bool LastEncodingSucceeded { get; private set; }
 
 		#endregion
 
@@ -42,6 +45,7 @@ namespace Sekai.CustomMusicScoreManager
 			Action<float, string> onProgress = null)
 		{
 			this.onProgress = onProgress;
+			LastEncodingSucceeded = false;
 			IsEncoding = true;
 			isCancelled = false;
 
@@ -98,93 +102,10 @@ namespace Sekai.CustomMusicScoreManager
 
 		#region Private Methods
 
-		/// <summary>
-		/// 检查FFmpeg是否可用
-		/// 优先检查可执行文件目录的ffmpeg.exe，然后检查系统PATH
-		/// </summary>
 		private bool CheckFFmpegAvailable()
 		{
-			// 首先尝试找到本地ffmpeg.exe
-			string localFFmpegPath = FindLocalFFmpeg();
-			if (!string.IsNullOrEmpty(localFFmpegPath))
-			{
-				ffmpegPath = localFFmpegPath;
-				Debug.Log($"[{EncoderName}] 使用本地FFmpeg: {ffmpegPath}");
-			}
-
-			try
-			{
-				ProcessStartInfo startInfo = new ProcessStartInfo
-				{
-					FileName = ffmpegPath,
-					Arguments = "-version",
-					UseShellExecute = false,
-					RedirectStandardOutput = true,
-					RedirectStandardError = true,
-					CreateNoWindow = true
-				};
-
-				using (Process process = Process.Start(startInfo))
-				{
-					if (process != null)
-					{
-						process.WaitForExit(5000);
-						bool available = process.ExitCode == 0;
-						if (available)
-						{
-							Debug.Log($"[{EncoderName}] FFmpeg可用: {ffmpegPath}");
-						}
-						return available;
-					}
-				}
-			}
-			catch (Exception ex)
-			{
-				Debug.LogWarning($"[{EncoderName}] FFmpeg检测失败: {ex.Message}");
-			}
-
-			return false;
-		}
-
-		/// <summary>
-		/// 查找本地FFmpeg可执行文件
-		/// </summary>
-		/// <returns>本地FFmpeg路径，如果不存在返回null</returns>
-		private string FindLocalFFmpeg()
-		{
-			try
-			{
-				// 获取可执行文件目录
-				string executableDir = GetExecutableDirectory();
-				if (string.IsNullOrEmpty(executableDir))
-				{
-					return null;
-				}
-
-				// 检查ffmpeg.exe是否存在
-				string localFFmpeg = Path.Combine(executableDir, "ffmpeg.exe");
-				if (File.Exists(localFFmpeg))
-				{
-					Debug.Log($"[{EncoderName}] 找到本地FFmpeg: {localFFmpeg}");
-					return localFFmpeg;
-				}
-
-				// 也检查子目录ffmpeg/ffmpeg.exe
-				string subDirFFmpeg = Path.Combine(executableDir, "ffmpeg", "ffmpeg.exe");
-				if (File.Exists(subDirFFmpeg))
-				{
-					Debug.Log($"[{EncoderName}] 找到本地FFmpeg: {subDirFFmpeg}");
-					return subDirFFmpeg;
-				}
-
-				Debug.Log($"[{EncoderName}] 本地FFmpeg不存在，将使用系统PATH中的ffmpeg");
-			}
-			catch (Exception ex)
-			{
-				Debug.LogWarning($"[{EncoderName}] 查找本地FFmpeg失败: {ex.Message}");
-			}
-
-			return null;
+			ffmpegPath = FFmpegLocator.FindAvailable(GetExecutableDirectory(), Environment.GetEnvironmentVariable("PATH"));
+			return !string.IsNullOrEmpty(ffmpegPath);
 		}
 
 		/// <summary>
@@ -337,9 +258,7 @@ namespace Sekai.CustomMusicScoreManager
 			}
 
 			// 构建FFmpeg命令
-			// 新方案：正常速度录制，无需setpts滤镜调整速度
-			// 视频直接使用原始帧率和时长
-			// 音频合并：录制的游戏音效 + 原始音乐文件
+			// 保持录制帧率，与 CRI 采集的音乐和音效合成。
 
 			StringBuilder argsBuilder = new StringBuilder();
 
@@ -350,7 +269,7 @@ namespace Sekai.CustomMusicScoreManager
 			string framePattern = $"{normalizedPath}/frame_%06d.jpg";
 			Debug.Log($"[{EncoderName}] 帧输入模式: {framePattern}");
 			Debug.Log($"[{EncoderName}] 帧率: {frameInfo.OriginalFrameRate}, 速度倍数: {frameInfo.SpeedMultiplier}");
-			argsBuilder.Append($"-framerate {frameInfo.OriginalFrameRate} -i \"{framePattern}\"");
+			argsBuilder.Append($"-nostdin -nostats -progress pipe:1 -framerate {frameInfo.OriginalFrameRate} -start_number 1 -i \"{framePattern}\"");
 
 			// 输入音频（如果有）
 			bool hasAudio = !string.IsNullOrEmpty(audioPath) && File.Exists(audioPath);
@@ -388,13 +307,13 @@ namespace Sekai.CustomMusicScoreManager
 					argsBuilder.Append($" -c:a libmp3lame -b:a {audioBitrate}");
 					Debug.LogWarning($"[{EncoderName}] 使用libmp3lame编码器（aac不可用）");
 				}
-				argsBuilder.Append(" -shortest");
+				argsBuilder.Append(" -map 0:v:0 -map 1:a:0 -af apad -shortest");
 			}
 
 			// 输出文件
 			// FFmpeg需要使用正斜杠路径
 			string normalizedOutputPath = outputPath.Replace('\\', '/');
-			argsBuilder.Append($" -y \"{normalizedOutputPath}\"");
+			argsBuilder.Append($" -pix_fmt yuv420p -movflags +faststart -map_metadata -1 -y \"{normalizedOutputPath}\"");
 
 			string args = argsBuilder.ToString();
 			Debug.Log($"[{EncoderName}] FFmpeg命令: ffmpeg {args}");
@@ -418,20 +337,23 @@ namespace Sekai.CustomMusicScoreManager
 			float progressStart = 0.2f;
 			float progressEnd = 0.9f;
 			StringBuilder errorBuilder = new StringBuilder();
+			var progressLines = new ConcurrentQueue<string>();
 
 			try
 			{
 				encodingProcess = new Process();
 				encodingProcess.StartInfo = startInfo;
 				encodingProcess.EnableRaisingEvents = true;
+				encodingProcess.OutputDataReceived += (sender, e) =>
+				{
+					if (e.Data != null) progressLines.Enqueue(e.Data);
+				};
 
 				encodingProcess.ErrorDataReceived += (sender, e) =>
 				{
 					if (!string.IsNullOrEmpty(e.Data))
 					{
-						errorBuilder.AppendLine(e.Data);
-						// 解析进度
-						ParseFFmpegProgress(e.Data, frameInfo.AdjustedDuration, progressStart, progressEnd);
+						lock (errorBuilder) errorBuilder.AppendLine(e.Data);
 					}
 				};
 
@@ -451,7 +373,10 @@ namespace Sekai.CustomMusicScoreManager
 			// 等待进程完成（在 try-catch 外使用 yield）
 			while (!encodingProcess.HasExited && !isCancelled)
 			{
-				yield return new WaitForSeconds(0.1f);
+				// Process callbacks run on worker threads. Only this coroutine may update Unity UI.
+				while (progressLines.TryDequeue(out string line))
+					ParseFFmpegProgress(line, frameInfo.AdjustedDuration, progressStart, progressEnd);
+				yield return new WaitForSecondsRealtime(0.1f);
 			}
 
 			if (isCancelled)
@@ -470,6 +395,8 @@ namespace Sekai.CustomMusicScoreManager
 			try
 			{
 				encodingProcess.WaitForExit();
+				while (progressLines.TryDequeue(out string line))
+					ParseFFmpegProgress(line, frameInfo.AdjustedDuration, progressStart, progressEnd);
 				success = encodingProcess.ExitCode == 0;
 
 				if (!success)
@@ -492,6 +419,7 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (success && File.Exists(outputPath))
 			{
+				LastEncodingSucceeded = new FileInfo(outputPath).Length > 0;
 				long fileSize = new FileInfo(outputPath).Length;
 				UpdateProgress(1f, $"编码完成: {fileSize / 1024 / 1024:F2}MB");
 				Debug.Log($"[{EncoderName}] 视频编码成功: {outputPath}");
@@ -508,30 +436,20 @@ namespace Sekai.CustomMusicScoreManager
 		/// </summary>
 		private void ParseFFmpegProgress(string output, float totalDuration, float progressStart, float progressEnd)
 		{
-			// FFmpeg输出格式: frame=  123 fps= 30 q=28.0 size=    1234kB time=00:00:04.12 bitrate= 2456.7kbits/s speed=1.00x
-			if (output.Contains("time="))
-			{
-				try
-				{
-					int timeIndex = output.IndexOf("time=");
-					string timeStr = output.Substring(timeIndex + 5, 11).Trim();
-					string[] parts = timeStr.Split(':');
-					if (parts.Length == 3)
-					{
-						int hours = int.Parse(parts[0]);
-						int minutes = int.Parse(parts[1]);
-						float seconds = float.Parse(parts[2]);
-						float currentTime = hours * 3600 + minutes * 60 + seconds;
-						float progress = currentTime / totalDuration;
-						float overallProgress = progressStart + (progressEnd - progressStart) * Mathf.Clamp01(progress);
-						UpdateProgress(overallProgress, $"编码中... {currentTime:F1}秒 / {totalDuration:F1}秒");
-					}
-				}
-				catch
-				{
-					// 忽略解析错误
-				}
-			}
+			if (!TryReadProgressSeconds(output, out double seconds)) return;
+			float fraction = totalDuration > 0 ? Mathf.Clamp01((float)seconds / totalDuration) : 0;
+			UpdateProgress(progressStart + (progressEnd - progressStart) * fraction,
+				$"编码中… {seconds:F1}秒 / {totalDuration:F1}秒");
+		}
+
+		public static bool TryReadProgressSeconds(string line, out double seconds)
+		{
+			seconds = 0;
+			const string prefix = "out_time_us=";
+			if (line == null || !line.StartsWith(prefix, StringComparison.Ordinal)) return false;
+			if (!long.TryParse(line.Substring(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out long microseconds) || microseconds < 0) return false;
+			seconds = microseconds / 1000000d;
+			return true;
 		}
 
 		/// <summary>
@@ -594,6 +512,8 @@ namespace Sekai.CustomMusicScoreManager
 		#endregion
 
 		#region Cleanup
+
+		private void OnDestroy() => CancelEncoding();
 
 		public override void CancelEncoding()
 		{

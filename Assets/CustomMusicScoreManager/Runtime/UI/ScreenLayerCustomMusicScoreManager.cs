@@ -3027,8 +3027,30 @@ namespace Sekai.CustomMusicScoreManager
 			}
 		}
 
-		private void OnGenerateVideoClicked()
+		private bool _checkingVideoEncoder;
+
+		private async void OnGenerateVideoClicked()
 	{
+		if (_checkingVideoEncoder) return;
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
+		_checkingVideoEncoder = true;
+		try
+		{
+			string applicationDirectory = Path.GetDirectoryName(Application.dataPath);
+			string environmentPath = Environment.GetEnvironmentVariable("PATH");
+			string encoder = await UniTask.RunOnThreadPool(() => FFmpegLocator.FindAvailable(applicationDirectory, environmentPath));
+			if (this == null || !isActiveAndEnabled) return;
+			if (string.IsNullOrEmpty(encoder))
+			{
+				ShowSuccessDialog(LocalizationManager.Get("manager.error.ffmpeg_unavailable"));
+				return;
+			}
+		}
+		finally
+		{
+			_checkingVideoEncoder = false;
+		}
+#endif
 		Debug.Log("[UI] OnGenerateVideoClicked called");
 		ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
 			DialogType.Common2ButtonDialog,
@@ -3063,6 +3085,12 @@ namespace Sekai.CustomMusicScoreManager
 
 	private void CheckVideoGenerationPermissions()
 	{
+		string supportError = AndroidVideoEncoder.CheckSupport(1920, 1080, 30);
+		if (!string.IsNullOrEmpty(supportError))
+		{
+			ShowSuccessDialog(supportError);
+			return;
+		}
 		Debug.Log("[UI] CheckVideoGenerationPermissions: Checking gallery permission");
 
 		// 检查是否已有相册权限
@@ -3866,8 +3894,10 @@ namespace Sekai.CustomMusicScoreManager
 
 			_baseFontEB = Resources.Load<TMP_FontAsset>(BaseFontEbPath);
 			_baseFontDB = Resources.Load<TMP_FontAsset>(BaseFontDbPath);
-			TMP_FontAsset dynamicFontEB = Resources.Load<TMP_FontAsset>(DynamicFontEbPath);
-			TMP_FontAsset dynamicFontDB = Resources.Load<TMP_FontAsset>(DynamicFontDbPath);
+			TMP_FontAsset dynamicFontEB = HighQualityDynamicFontProvider.Get(
+				Resources.Load<TMP_FontAsset>(DynamicFontEbPath));
+			TMP_FontAsset dynamicFontDB = HighQualityDynamicFontProvider.Get(
+				Resources.Load<TMP_FontAsset>(DynamicFontDbPath));
 			AddFallbackFontAsset(_baseFontEB, dynamicFontEB);
 			AddFallbackFontAsset(_baseFontDB, dynamicFontDB);
 			_fontAssetSetup = true;
@@ -3887,7 +3917,7 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (!fontAsset.fallbackFontAssetTable.Contains(fallbackFontAsset))
 			{
-				fontAsset.fallbackFontAssetTable.Add(fallbackFontAsset);
+				fontAsset.fallbackFontAssetTable.Insert(0, fallbackFontAsset);
 			}
 		}
 
