@@ -41,6 +41,14 @@ namespace Sekai
 
 		private void Start()
 		{
+			InitSprites();
+			Hide();
+		}
+
+		private void InitSprites()
+		{
+			bool useFakePerfect = LiveSettingData.LoadFromStorage()?.UsesAutoFakePerfectMode ?? false;
+			Sprite autoSprite = useFakePerfect ? perfect : auto;
 			sprites = new Dictionary<NoteResult, Sprite>
 			{
 				{ NoteResult.Miss, miss },
@@ -49,16 +57,15 @@ namespace Sekai
 				{ NoteResult.Great, great },
 				{ NoteResult.Perfect, perfect },
 				{ NoteResult.JustPerfect, perfect },
-				{ NoteResult.Auto, auto }
+				{ NoteResult.Auto, autoSprite }
 			};
-			Hide();
 		}
 
 		public void Excute((NoteResult result, NoteResultDescription description) judgeInfo)
 		{
 			if (sprites == null)
 			{
-				Start();
+				InitSprites();
 			}
 			if (sprites != null && sprites.TryGetValue(judgeInfo.result, out Sprite sprite) && spriteRenderer != null)
 			{

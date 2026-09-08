@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using CP;
@@ -12,6 +12,8 @@ namespace Sekai.MusicScoreMaker.Common
 {
 	public sealed class CustomMusicScoreEntry
 	{
+		private AudioClip _audioClip;
+
 		public CustomMusicScoreEntry(string rootDirectory, CustomMusicScoreManifest manifest)
 		{
 			RootDirectory = rootDirectory;
@@ -91,28 +93,71 @@ namespace Sekai.MusicScoreMaker.Common
 		public async UniTask<bool> RegisterAudioAsync(CancellationToken token)
 		{
 			token.ThrowIfCancellationRequested();
-			AudioClip audioClip = await LoadAudioClipAsync(token);
-			if (audioClip == null)
+			if (_audioClip == null)
+			{
+				_audioClip = await LoadAudioClipAsync(token);
+			}
+			if (_audioClip == null)
 			{
 				return false;
 			}
 
 			try
 			{
-				AudioLengthMs = (long)(audioClip.length * 1000f);
-				byte[] wavData = CreatePcm16WavData(audioClip);
+				AudioLengthMs = (long)(_audioClip.length * 1000f);
+				byte[] wavData = CreatePcm16WavData(_audioClip);
 				long sourceTicks = File.Exists(AudioPath) ? File.GetLastWriteTimeUtc(AudioPath).Ticks : DateTime.UtcNow.Ticks;
-				return SoundManager.Instance.RegisterExternalAudioData(AudioCueName, wavData, audioClip.channels, audioClip.frequency, AudioLengthMs, sourceTicks);
+				return SoundManager.Instance.RegisterExternalAudioData(AudioCueName, wavData, _audioClip.channels, _audioClip.frequency, AudioLengthMs, sourceTicks);
 			}
 			catch (Exception exception)
 			{
 				LogUtility.LogWarning("Failed to register custom music audio. path:{0} error:{1}", AudioPath, exception.Message);
 				return false;
 			}
-			finally
+		}
+
+		public float[] GetAudioSamples(int sampleCount)
+		{
+			if (_audioClip == null || sampleCount <= 0)
 			{
-				UnityEngine.Object.Destroy(audioClip);
+				return null;
 			}
+
+			float[] samples = new float[sampleCount];
+			float[] channelData = new float[_audioClip.samples * _audioClip.channels];
+			if (!_audioClip.GetData(channelData, 0))
+			{
+				return null;
+			}
+
+			int samplesPerPixel = channelData.Length / sampleCount;
+			if (samplesPerPixel < 1)
+			{
+				samplesPerPixel = 1;
+			}
+
+			for (int i = 0; i < sampleCount; i++)
+			{
+				int startIndex = i * samplesPerPixel;
+				float maxAmplitude = 0f;
+				int endIndex = Mathf.Min(startIndex + samplesPerPixel, channelData.Length);
+				for (int j = startIndex; j < endIndex; j++)
+				{
+					float absValue = Mathf.Abs(channelData[j]);
+					if (absValue > maxAmplitude)
+					{
+						maxAmplitude = absValue;
+					}
+				}
+				samples[i] = maxAmplitude;
+			}
+
+			return samples;
+		}
+
+		public AudioClip GetAudioClip()
+		{
+			return _audioClip;
 		}
 
 		private async UniTask<AudioClip> LoadAudioClipAsync(CancellationToken token)

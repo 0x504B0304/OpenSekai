@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using CP;
+using Sekai;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using UnityEngine;
 
@@ -62,6 +63,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 		private bool _isInTestPlay;
 
 		private float _lastOperationTime;
+
+		private float _autoSaveTimerStartTime;
+
+		private bool _autoSaveTimerRunning;
+
+		private static readonly int[] AutoSaveIntervalOptions = new int[6] { 0, 120, 240, 360, 480, 600 };
 
 		public Dictionary<Type, List<Delegate>> ActionList
 		{
@@ -352,6 +359,41 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 			_lastOperationTime = Time.time;
 		}
 
+		public void StartAutoSaveTimer()
+		{
+			_autoSaveTimerStartTime = Time.time;
+			_autoSaveTimerRunning = true;
+		}
+
+		public void StopAutoSaveTimer()
+		{
+			_autoSaveTimerRunning = false;
+		}
+
+		public void ResumeAutoSaveTimer()
+		{
+			_autoSaveTimerRunning = true;
+		}
+
+		public void CheckAutoSaveTimer()
+		{
+			if (!_autoSaveTimerRunning)
+			{
+				return;
+			}
+			int autoSaveIntervalIndex = LiveSettingData.LoadFromStorage().AutoSaveIntervalIndex;
+			if (autoSaveIntervalIndex <= 0 || autoSaveIntervalIndex >= AutoSaveIntervalOptions.Length)
+			{
+				return;
+			}
+			int interval = AutoSaveIntervalOptions[autoSaveIntervalIndex];
+			if (Time.time - _autoSaveTimerStartTime >= (float)interval)
+			{
+				_autoSaveTimerStartTime = Time.time;
+				Publish(new AutoSaveMusicScoreEvent());
+			}
+		}
+
 		private void CheckAutoSave()
 		{
 			if (!MusicScoreMakerSettingsManager.AutoSaveEnabled)
@@ -370,6 +412,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 			_savedUndoStack = CloneStack(_undoStack);
 			_savedRedoStack = CloneStack(_redoStack);
 			_isInTestPlay = true;
+			StopAutoSaveTimer();
 		}
 
 		public void RestoreUndoRedoStack()
@@ -385,6 +428,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 				_savedRedoStack = null;
 			}
 			_isInTestPlay = false;
+			ResumeAutoSaveTimer();
 		}
 
 		public void ClearSavedUndoRedoStack()
@@ -483,6 +527,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Events
 			{
 				target.Push(items[i]);
 			}
+		}
+
+		private void LateUpdate()
+		{
+			CheckAutoSaveTimer();
 		}
 	}
 }

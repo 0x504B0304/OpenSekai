@@ -60,11 +60,14 @@ namespace Sekai
 
 		public void Show()
 		{
+			bool useFakePerfect = LiveSettingData.LoadFromStorage()?.UsesAutoFakePerfectMode ?? false;
 			SetActive(pauseButton, false);
 			SetActive(pauseButtonDisable, false);
-			SetActive(autoLivePauseButton, true);
+			// Hide auto pause button in Fake Perfect mode
+			SetActive(autoLivePauseButton, !useFakePerfect);
 			SetActive(autoLivePauseButtonDisable, false);
-			SetActive(autoLabel, false);
+			// Hide auto label in Fake Perfect mode
+			SetActive(autoLabel, !useFakePerfect);
 			gameObject.SetActive(true);
 		}
 

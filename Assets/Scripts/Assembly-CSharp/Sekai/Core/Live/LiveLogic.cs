@@ -17,6 +17,12 @@ namespace Sekai.Core.Live
 		private const int MouseFallbackTouchId = -1;
 		private const int MouseFallbackFingerId = 0;
 
+		// Video Generation Mode configuration
+		private bool isVideoGenerationMode;
+		private int videoGenerationSpeedMultiplier = 1;
+		private bool videoGenerationMuteAudio;
+		private bool videoGenerationDisablePause;
+
 		[Serializable]
 		public class InputTmp
 		{
@@ -105,6 +111,12 @@ namespace Sekai.Core.Live
 
 		public bool IsAllPerfectCombo => scoreLogic?.IsAllPerfectCombo ?? false;
 
+		// Video Generation Mode public properties
+		public bool IsVideoGenerationMode => isVideoGenerationMode;
+		public int VideoGenerationSpeedMultiplier => videoGenerationSpeedMultiplier;
+		public bool VideoGenerationMuteAudio => videoGenerationMuteAudio;
+		public bool VideoGenerationDisablePause => videoGenerationDisablePause;
+
 		public LiveLogic(LiveBundleBuildData data)
 		{
 			NativeInput.Enable();
@@ -132,6 +144,9 @@ namespace Sekai.Core.Live
 			seBaseVolume = ApplicationLocalSettings.LoadFromStorage().LiveVolume?.Se ?? 1f;
 			noteDisplayTimeOffset = LiveConfig.GetNoteDisplayOffsetTime(bootData?.LiveSettingData?.NoteSpeed ?? 6f);
 
+			// Detect Video Generation Mode from bootData
+			DetectVideoGenerationMode(bootData);
+
 			musicScore = bootData?.MusicData?.MusicScore ?? new MusicScore();
 			if (bootData?.MusicData != null)
 			{
@@ -152,6 +167,24 @@ namespace Sekai.Core.Live
 			}
 			ResetScoreState();
 			RefreshInput();
+		}
+
+		private void DetectVideoGenerationMode(LiveBootDataBase bootData)
+		{
+			if (bootData is VideoGenerationBootData videoGenData)
+			{
+				isVideoGenerationMode = videoGenData.IsVideoGenerationMode;
+				videoGenerationSpeedMultiplier = videoGenData.VideoGenerationSpeedMultiplier;
+				videoGenerationMuteAudio = videoGenData.VideoGenerationMuteAudio;
+				videoGenerationDisablePause = videoGenData.VideoGenerationDisablePause;
+			}
+			else
+			{
+				isVideoGenerationMode = false;
+				videoGenerationSpeedMultiplier = 1;
+				videoGenerationMuteAudio = false;
+				videoGenerationDisablePause = false;
+			}
 		}
 
 		public void SetSkillLogic(SkillLogic logic)
@@ -263,10 +296,27 @@ namespace Sekai.Core.Live
 				}
 				if (note.MusicScoreInfo.time > currentFrameInfo.time)
 				{
-					return;
+					break;
 				}
 				note.AutoJudgment(currentFrameInfo);
 				index++;
+			}
+
+			int highSpeedIndex = highSpeedNoteStartIndex;
+			while (highSpeedIndex < highSpeedNoteArray.Length)
+			{
+				NoteBase note = highSpeedNoteArray[highSpeedIndex];
+				if (note == null || note.State == NoteState.Done)
+				{
+					highSpeedIndex++;
+					continue;
+				}
+				if (note.MusicScoreInfo.time > currentFrameInfo.time)
+				{
+					break;
+				}
+				note.AutoJudgment(currentFrameInfo);
+				highSpeedIndex++;
 			}
 		}
 
@@ -360,6 +410,9 @@ namespace Sekai.Core.Live
 					continue;
 				}
 
+				// Decoration notes need to be processed after Excute to check OffsetJudgeTime
+				// Skip early decoration check here - will be handled after Excute
+
 				if (!Mathf.Approximately(note.speedRatio, 1f))
 				{
 					if (i == noteStartIndex)
@@ -379,11 +432,19 @@ namespace Sekai.Core.Live
 					offsetTime = -offsetTime;
 				}
 				note.Excute(currentFrameInfo, offsetTime);
+
+				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
+				// For long notes, trigger at both start and end times
+				if (note.IsDecoration && note.State != NoteState.Done && ShouldTriggerDecorationJudgment(note))
+				{
+					DecorationJudgment(note);
+				}
+
 				if (note.State == NoteState.Done && i == noteStartIndex)
 				{
 					noteStartIndex++;
 				}
-				else if (note.State != NoteState.Done)
+				else if (note.State != NoteState.Done && !note.IsDecoration)
 				{
 					UpdateJudgmentNoteArray(note);
 				}
@@ -410,6 +471,9 @@ namespace Sekai.Core.Live
 					continue;
 				}
 
+				// Decoration notes need to be processed after Excute to check OffsetJudgeTime
+				// Skip early decoration check here - will be handled after Excute
+
 				float offsetTime = currentFrameInfo.time >= note.MusicScoreInfo.time
 					? noteDisplayTimeOffset
 					: CalcTimeOffset(note);
@@ -419,14 +483,145 @@ namespace Sekai.Core.Live
 				}
 
 				note.Excute(currentFrameInfo, offsetTime);
+
+				// Handle decoration notes: auto-judge at precise judgment time (like autoplay)
+				// For long notes, trigger at both start and end times
+				if (note.IsDecoration && note.State != NoteState.Done && ShouldTriggerDecorationJudgment(note))
+				{
+					DecorationJudgment(note);
+				}
+
 				if (note.State == NoteState.Done && i == highSpeedNoteStartIndex)
 				{
 					highSpeedNoteStartIndex++;
 				}
-				else if (note.State != NoteState.Done)
+				else if (note.State != NoteState.Done && !note.IsDecoration)
 				{
 					UpdateJudgmentNoteArray(note);
 				}
+			}
+		}
+
+		private bool ShouldTriggerDecorationJudgment(NoteBase note)
+		{
+			if (note == null)
+			{
+				return false;
+			}
+
+			// For long notes, trigger at both start and end times
+			if (note is LongNote longNote)
+			{
+				// Trigger at start time (head)
+				if (longNote.OffsetJudgeTime >= 0 && longNote.State == NoteState.Playing)
+				{
+					return true;
+				}
+
+				// Trigger at end time (tail)
+				if (longNote.NoteList != null && longNote.NoteList.Count > 0)
+				{
+					NoteBase lastChild = longNote.NoteList[longNote.NoteList.Count - 1];
+					if (lastChild != null && currentFrameInfo.time >= lastChild.MusicScoreInfo.time)
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			// For normal notes, trigger at the judgment time
+			return note.OffsetJudgeTime >= 0;
+		}
+
+		private void DecorationJudgment(NoteBase note)
+		{
+			if (note == null || note.State == NoteState.Done)
+			{
+				return;
+			}
+
+			// Decoration notes are auto-judged when reaching judgment time
+			// Play tap effect and SE, but do not trigger score/combo callbacks or judgment text
+
+			// For long notes, handle specially: play head effect at start, keep body showing, play end effect at end
+			if (note is LongNote longNote)
+			{
+				DecorationLongNoteJudgment(longNote);
+				return;
+			}
+
+			// Set JudgeInfo to Perfect for effect playback (TapEffectView checks Result)
+			note.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+			// For normal notes: play effect and remove
+			LiveViewExt.JudgmentNote(liveViews, note);
+			note.SetStateUnnotice(NoteState.Done);
+			LiveViewExt.UnspawnNote(liveViews, note);
+		}
+
+		private void DecorationLongNoteJudgment(LongNote longNote)
+		{
+			if (longNote == null)
+			{
+				return;
+			}
+
+			// Check if we are at the start or end of the long note
+			NoteBase lastChild = longNote.NoteList != null && longNote.NoteList.Count > 0
+				? longNote.NoteList[longNote.NoteList.Count - 1]
+				: null;
+
+			bool isAtEnd = lastChild != null && currentFrameInfo.time >= lastChild.MusicScoreInfo.time;
+			bool isAtStart = longNote.OffsetJudgeTime >= 0 && longNote.State == NoteState.Playing;
+
+			// At start: play head effect, but keep the long note showing (don't mark as Done)
+			if (isAtStart && !isAtEnd && longNote.State != NoteState.InputBegan)
+			{
+				// Set JudgeInfo to Perfect for effect playback (TapEffectView checks Result)
+				longNote.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+				// Play head judgment effect (tap effect and SE)
+				LiveViewExt.JudgmentNote(liveViews, longNote);
+				// Set state to InputBegan to simulate holding (without actual input)
+				longNote.SetStateUnnotice(NoteState.InputBegan);
+			}
+
+			// 头部触发之后，处理中间的LongHoldCombo自动判定
+			if (longNote.NoteList != null && longNote.State == NoteState.InputBegan)
+			{
+				foreach (NoteBase childNote in longNote.NoteList)
+				{
+					// 跳过LongNote自身和尾部，已经处理过
+					if (childNote == longNote || childNote == lastChild)
+					{
+						continue;
+					}
+
+					// 只处理LongHoldCombo
+					if (childNote is LongHoldCombo holdCombo && childNote.State != NoteState.Done)
+					{
+						// 检查该combo点是否到达判定时间
+						if (childNote.MusicScoreInfo.time <= currentFrameInfo.time)
+						{
+							// 自动判定该combo点
+							holdCombo.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+							LiveViewExt.JudgmentNote(liveViews, holdCombo);
+							holdCombo.SetStateUnnotice(NoteState.Done);
+						}
+					}
+				}
+			}
+
+			// At end: play end effect using the last child note's type and remove the long note
+			if (isAtEnd && lastChild != null)
+			{
+				// Set JudgeInfo to Perfect for the last child note (actual tail note type)
+				lastChild.SetJudgeInfoForDecoration(NoteResult.JustPerfect);
+				// Play end judgment effect using the last child note's type
+				LiveViewExt.JudgmentNote(liveViews, lastChild);
+				// Mark as done and unspawn
+				longNote.SetStateUnnotice(NoteState.Done);
+				LiveViewExt.UnspawnNote(liveViews, longNote);
 			}
 		}
 
@@ -462,7 +657,8 @@ namespace Sekai.Core.Live
 		{
 			// FrictionHideLongNote itself has no scoring judgment, but it is the hidden input carrier for trace long notes.
 			// It must still receive held input frames so its generated LongHoldCombo points are judged by LongNote.Judgment.
-			if (note != null && (note.HasJudgment || note is FrictionHideLongNote))
+			// Decoration notes are auto-judged and should not receive player input.
+			if (note != null && !note.IsDecoration && (note.HasJudgment || note is FrictionHideLongNote))
 			{
 				judgmentNoteList.Add(note);
 			}
@@ -1157,7 +1353,18 @@ namespace Sekai.Core.Live
 				return 0f;
 			}
 
-			return noteDisplayTimeOffset / speedRatio / note.speedRatio;
+			// 检测负流速：当 speedRatio * note.speedRatio < 0 时标记为负流速
+			float rawEffectiveSpeedRatio = speedRatio * note.speedRatio;
+			note.IsNegativeSpeed = rawEffectiveSpeedRatio < 0f;
+
+			// Use absolute value to handle negative speed ratios which cause rendering issues
+			float effectiveSpeedRatio = Mathf.Abs(rawEffectiveSpeedRatio);
+			if (Mathf.Approximately(effectiveSpeedRatio, 0f))
+			{
+				return 0f;
+			}
+
+			return noteDisplayTimeOffset / effectiveSpeedRatio;
 		}
 
 		private float CalcNoteSpeedRatio(float currentProgress, float noteProgress)

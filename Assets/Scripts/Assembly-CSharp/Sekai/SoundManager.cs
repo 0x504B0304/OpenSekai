@@ -1742,6 +1742,30 @@ namespace Sekai
 			}
 			soundEffectPlayer?.Resume(CriAtomEx.ResumeMode.PausedPlayback);
 		}
+
+		public void SetIngameBgmPitch(float pitch)
+		{
+			if (ingameBgmPlayer != null && IsPlaybackValid(currentIngamePlayback))
+			{
+				float pitchRatio = Mathf.Max(0.1f, pitch);
+				ingameBgmPlayer.SetPitch(1200f * Mathf.Log(pitchRatio, 2f));
+				ingameBgmPlayer.Update(currentIngamePlayback);
+			}
+		}
+
+		public void SetIngameBgmVolume(float volume)
+		{
+			if (ingameBgmPlayer != null && IsPlaybackValid(currentIngamePlayback))
+			{
+				ingameBgmPlayer.SetVolume(masterVolume * bgmVolume * Mathf.Max(0f, volume));
+				ingameBgmPlayer.Update(currentIngamePlayback);
+			}
+		}
+
+		public uint GetCurrentIngamePlaybackId()
+		{
+			return currentIngamePlayback.id;
+		}
 	}
 
 	internal sealed class ExternalAudioEntry

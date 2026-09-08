@@ -1,4 +1,4 @@
-Shader "OpenSekai/Compatibility/URP Lit"
+Shader "OjskCommunity/Compatibility/URP Lit"
 {
     Properties
     {

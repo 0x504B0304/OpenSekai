@@ -1,7 +1,10 @@
+using System.Globalization;
+using Sekai;
 using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Input;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
+using Sekai.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -27,6 +30,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private DispatcherEventBaseButton _selectAllConnectedNotesButton;
+
+		[SerializeField]
+		private DispatcherEventBaseButton _speedChangeButton;
+
+		[SerializeField]
+		private DispatcherEventBaseButton _decorationButton;
+
+		[SerializeField]
+		private DispatcherEventBaseButton _colorButton;
 
 		[SerializeField]
 		private ToolInputHandler _expandLeftInputHandler;
@@ -148,6 +160,13 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			if (graphic != null) graphic.raycastTarget = false;
 		}
 
+		private void Start()
+		{
+			SetupSpeedChangeButton();
+			SetupDecorationButton();
+			SetupColorButton();
+		}
+
 		private void OnDestroy()
 		{
 			if (_expandLeftInputHandler != null)
@@ -162,6 +181,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				_moveInputHandler.RemoveAllListeners();
 			}
+			CleanupSpeedChangeButton();
+			CleanupDecorationButton();
+			CleanupColorButton();
 			RemoveEventDispatcher();
 		}
 
@@ -219,6 +241,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			_copyButton.SetActive(eventData.isCopy);
 			_deleteButton.SetActive(eventData.isDelete);
 			_selectAllConnectedNotesButton.SetActive(eventData.isSelectAllConnectedNotes);
+			_speedChangeButton.SetActive(eventData.isSpeedChange);
+			_decorationButton.SetActive(eventData.isDecoration);
+			_colorButton.SetActive(eventData.isColor);
 			_expandLeftInputHandler.SetActive(eventData.isLeftExpand);
 			_expandRightInputHandler.SetActive(eventData.isRightExpand);
 			var data = MusicScoreMakerUtility.GetMusicScoreMakerData();
@@ -432,6 +457,257 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		public static bool IsExpandInputDragging()
 		{
 			return _sIsExpandInputDragging;
+		}
+
+		public static bool IsValidHexColor(string colorString)
+		{
+			// 检查字符串是否以#开头
+			if (string.IsNullOrEmpty(colorString) || !colorString.StartsWith("#"))
+			{
+				return false;
+			}
+
+			// 检查长度是否为7或9（#RRGGBB或#RRGGBBAA）
+			if (colorString.Length != 7 && colorString.Length != 9)
+			{
+				return false;
+			}
+
+			// 使用UnityEngine.ColorUtility.TryParseHtmlString验证
+			return UnityEngine.ColorUtility.TryParseHtmlString(colorString, out _);
+		}
+
+		private void SetupSpeedChangeButton()
+		{
+			if (_speedChangeButton != null)
+			{
+				CustomButton button = _speedChangeButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnSpeedChangeButtonClick);
+				}
+			}
+		}
+
+		private void CleanupSpeedChangeButton()
+		{
+			if (_speedChangeButton != null)
+			{
+				CustomButton button = _speedChangeButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnSpeedChangeButtonClick);
+				}
+			}
+		}
+
+		private void OnSpeedChangeButtonClick()
+	{
+		MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+		if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
+		{
+			return;
+		}
+
+		// 获取第一个选中音符的 speedRatio
+		MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+		float currentSpeedRatio = firstNote?.speedRatio ?? 1f;
+
+		AddMusicScoreEventDataDialog dialog = null;
+		dialog = ScreenManager.Instance?.Show2ButtonDialog<AddMusicScoreEventDataDialog>(
+			DialogType.AddMusicScoreEventDataDialog,
+			null,
+			"WORD_DECIDE",
+			"WORD_CANCEL",
+			() =>
+			{
+				// 确认按钮回调：更新所有选中音符的 speedRatio
+				if (dialog != null && data != null && data.SelectedNoteIdList != null)
+				{
+					if (float.TryParse(dialog.InputFieldText, NumberStyles.Float, CultureInfo.InvariantCulture, out float newSpeedRatio))
+					{
+						foreach (int noteId in data.SelectedNoteIdList)
+						{
+							MusicScoreNoteBase note = data.FindNote(noteId);
+							if (note != null)
+							{
+								note.speedRatio = newSpeedRatio;
+							}
+						}
+						MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+					}
+				}
+			},
+			null,
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			allowCloseExternal: true);
+
+		if (dialog == null)
+		{
+			return;
+		}
+
+		// 隐藏删除按钮
+		dialog.HideDeleteButton();
+		dialog.Setup(MusicScoreEventType.HighSpeed, initialHighSpeed: currentSpeedRatio);
+	}
+
+		private void SetupDecorationButton()
+		{
+			if (_decorationButton != null)
+			{
+				CustomButton button = _decorationButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnDecorationButtonClick);
+				}
+			}
+		}
+
+		private void CleanupDecorationButton()
+		{
+			if (_decorationButton != null)
+			{
+				CustomButton button = _decorationButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnDecorationButtonClick);
+				}
+			}
+		}
+
+		private void OnDecorationButtonClick()
+		{
+			MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+			if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
+			{
+				return;
+			}
+
+			// 获取第一个选中音符的 isDecoration 状态
+			MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+			bool isCurrentlyDecoration = firstNote?.isDecoration ?? false;
+
+			// 根据当前状态显示不同的提示文字
+			string messageKey = isCurrentlyDecoration ? "MSG_CANCEL_DECORATION_NOTE" : "MSG_SET_DECORATION_NOTE";
+
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				messageKey,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() =>
+				{
+					// 确认按钮回调：更新所有选中音符的 isDecoration 状态
+					if (data != null && data.SelectedNoteIdList != null)
+					{
+						bool newDecorationState = !isCurrentlyDecoration;
+						foreach (int noteId in data.SelectedNoteIdList)
+						{
+							MusicScoreNoteBase note = data.FindNote(noteId);
+							if (note != null)
+							{
+								note.isDecoration = newDecorationState;
+							}
+						}
+						MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+					}
+				},
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true);
+		}
+
+		private void SetupColorButton()
+		{
+			if (_colorButton != null)
+			{
+				CustomButton button = _colorButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.AddListener(OnColorButtonClick);
+				}
+			}
+		}
+
+		private void CleanupColorButton()
+		{
+			if (_colorButton != null)
+			{
+				CustomButton button = _colorButton.GetComponent<CustomButton>();
+				if (button != null)
+				{
+					button.onClick.RemoveListener(OnColorButtonClick);
+				}
+			}
+		}
+
+		private void OnColorButtonClick()
+		{
+			MusicScoreMakerData data = MusicScoreMakerUtility.GetMusicScoreMakerData();
+			if (data == null || data.SelectedNoteIdList == null || data.SelectedNoteIdList.Count == 0)
+			{
+				return;
+			}
+
+			// 获取第一个选中音符的 guideColor 值
+			MusicScoreNoteBase firstNote = data.FindNote(data.SelectedNoteIdList[0]);
+			string currentColor = firstNote?.guideColor ?? "#ffffff";
+
+			AddMusicScoreEventDataDialog dialog = null;
+			dialog = ScreenManager.Instance?.Show2ButtonDialog<AddMusicScoreEventDataDialog>(
+				DialogType.AddMusicScoreEventDataDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() =>
+				{
+					// 确认按钮回调：校验颜色值并应用到所有选中音符
+					if (dialog != null && data != null && data.SelectedNoteIdList != null)
+					{
+						string colorValue = dialog.InputFieldText;
+						if (IsValidHexColor(colorValue))
+						{
+							foreach (int noteId in data.SelectedNoteIdList)
+							{
+								MusicScoreNoteBase note = data.FindNote(noteId);
+								if (note != null)
+								{
+									note.guideColor = colorValue;
+								}
+							}
+							MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+						}
+						else
+						{
+							// 颜色值不合法，显示提示
+							ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+								DialogType.Common1ButtonDialog,
+								"MSG_INVALID_COLOR_VALUE",
+								"WORD_OK",
+								null,
+								DisplayLayerType.Layer_Dialog,
+								DialogSize.Manual,
+								allowCloseExternal: true);
+						}
+					}
+				},
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true);
+
+			if (dialog == null)
+			{
+				return;
+			}
+
+			// 隐藏删除按钮
+			dialog.HideDeleteButton();
+			// 设置颜色输入
+			dialog.SetupColorInput(currentColor);
 		}
 
 		private void AdjustPositionToFitScreen()

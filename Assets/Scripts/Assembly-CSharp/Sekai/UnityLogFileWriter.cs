@@ -7,7 +7,7 @@ namespace Sekai
 {
 	public static class UnityLogFileWriter
 	{
-		private const string LogDirectoryName = "OpenSekaiLogs";
+		private const string LogDirectoryName = "OjskCommunityLogs";
 		private static readonly object SyncRoot = new object();
 		private static StreamWriter writer;
 		private static bool initialized;

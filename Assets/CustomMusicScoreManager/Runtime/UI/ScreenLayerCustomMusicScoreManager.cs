@@ -1,17 +1,21 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using Cysharp.Threading.Tasks;
+using Sekai;
 using Sekai.Live;
 using Sekai.Localization;
 using Sekai.MusicScoreMaker.Common;
 using Sekai.MusicScoreMaker.Ingame.Models;
 using Sekai.MusicScoreMaker.Ingame.Presenters;
+using Sekai.MusicScoreMaker.Ingame.Utilities;
+using Sekai.UI;
 using SFB;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using CustomMusicScoreManager.Helpers;
 
 namespace Sekai.CustomMusicScoreManager
 {
@@ -64,6 +68,27 @@ namespace Sekai.CustomMusicScoreManager
 		private const int NoteSeTypeCount = 2;
 
 		private const int NoteEffectTypeCount = 2;
+
+		private const int AutoSaveIntervalTypeCount = 6;
+
+		private static readonly string[] AutoSaveIntervalOptions =
+		{
+			"关闭",
+			"2分钟",
+			"4分钟",
+			"6分钟",
+			"8分钟",
+			"10分钟"
+		};
+
+		private const int ScoreMakerPreviewModeTypeCount = 3;
+
+		private static readonly string[] ScoreMakerPreviewModeOptions =
+		{
+			"内容缩略图",
+			"音频波形图",
+			"叠加"
+		};
 
 		private const float MinVisualAlphaPercent = 10f;
 
@@ -120,6 +145,8 @@ namespace Sekai.CustomMusicScoreManager
 		private Button _deleteButton;
 		private Button _exportButton;
 		private Button _saveManifestButton;
+		private Button _calculateDurationButton;
+		private Button _generateVideoButton;
 		private Button _audioSelectButton;
 		private Button _jacketSelectButton;
 		private Button _scoreSelectButton;
@@ -133,8 +160,14 @@ namespace Sekai.CustomMusicScoreManager
 		private TMP_InputField _settingNoteSpeedInput;
 		private TMP_InputField _settingTimingAdjustInput;
 		private TMP_InputField _settingNoteShowRateInput;
+		private TMP_InputField _settingBackgroundBrightnessInput;
 		private TMP_InputField _settingNoteLineAlphaInput;
 		private TMP_InputField _settingGuideLineAlphaInput;
+		private TMP_InputField _settingJudgeLineAlphaInput;
+		private TextMeshProUGUI _settingAutoSaveIntervalLabel;
+		private int _settingAutoSaveIntervalIndex;
+		private TextMeshProUGUI _settingScoreMakerPreviewModeLabel;
+		private int _settingScoreMakerPreviewModeIndex;
 		private TextMeshProUGUI _settingNoteSkinLabel;
 		private int _settingNoteSkinIndex;
 		private TextMeshProUGUI _settingNoteSeLabel;
@@ -145,12 +178,19 @@ namespace Sekai.CustomMusicScoreManager
 		private bool _settingSimultaneousLineEnabled;
 		private TextMeshProUGUI _settingMusicInfoDisplayModeLabel;
 		private int _settingMusicInfoDisplayMode;
+		private TextMeshProUGUI _settingUseMaimaiMusicInfoSeLabel;
+		private bool _settingUseMaimaiMusicInfoSeEnabled;
+		private TextMeshProUGUI _settingAutoFakePerfectModeLabel;
+		private int _settingAutoFakePerfectMode;
+		private TextMeshProUGUI _settingAutoResultAnimationLabel;
+		private int _settingAutoResultAnimation;
 		private TextMeshProUGUI _settingLiveBackgroundModeLabel;
 		private int _settingLiveBackgroundMode;
 		private TextMeshProUGUI _settingFastLateFlickLabel;
 		private bool _settingFastLateFlickEnabled;
 		private TextMeshProUGUI _settingFullscreenLabel;
 		private bool _settingFullscreenEnabled;
+		private string _lastExportPath;
 		private TMP_InputField _titleInput;
 		private TMP_InputField _scoreTitleInput;
 		private TMP_InputField _userInput;
@@ -217,7 +257,7 @@ namespace Sekai.CustomMusicScoreManager
 			RectTransform topBar = CreatePanel("TopBar", root, new Color32(31, 37, 45, 255));
 			SetStretchTop(topBar, 0f, 0f, 0f, 108f);
 
-			TextMeshProUGUI title = CreateText("Title", topBar, $"Open Sekai {Application.version}", 40, FontStyles.Bold, TextAlignmentOptions.Left);
+			TextMeshProUGUI title = CreateText("Title", topBar, $"Ojsk Community {Application.version}", 40, FontStyles.Bold, TextAlignmentOptions.Left);
 			SetAnchor(title.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(36f, 0f), new Vector2(560f, 0f));
 
 			RectTransform toolbar = CreateRect("Toolbar", topBar);
@@ -228,7 +268,7 @@ namespace Sekai.CustomMusicScoreManager
 			toolbarLayout.childControlHeight = false;
 			toolbarLayout.spacing = 14f;
 			CreateButton("SettingsButton", toolbar, "设置", OpenSettings, 150f, 56f);
-			CreateButton("RefreshButton", toolbar, "刷新", RefreshList, 150f, 56f);
+			CreateButton("RefreshButton", toolbar, "刷新", RefreshButtonClicked, 150f, 56f);
 			CreateButton("NewButton", toolbar, "新建", CreateEntry, 132f, 56f);
 			CreateButton("ImportButton", toolbar, "导入", ImportEntry, 150f, 56f);
 
@@ -355,6 +395,7 @@ namespace Sekai.CustomMusicScoreManager
 			_singerInput = CreateInputField(_manifestFieldGrid, "歌手", "singer");
 			_collaborationLabelInput = CreateInputField(_manifestFieldGrid, "联动标签", "collaborationLabel");
 			_descriptionInput = CreateInputField(_manifestFieldGrid, "描述", "description");
+			_generateVideoButton = CreateButtonField(_manifestFieldGrid, "生成视频", "点击开始", OnGenerateVideoClicked);
 			RectTransform saveRow = CreateRect("SaveManifestRow", detailPanel);
 			SetStretchBottom(saveRow, 28f, 28f, 28f, 64f);
 			HorizontalLayoutGroup saveRowGroup = saveRow.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -364,6 +405,7 @@ namespace Sekai.CustomMusicScoreManager
 			saveRowGroup.childForceExpandHeight = false;
 			saveRowGroup.childAlignment = TextAnchor.MiddleLeft;
 			_saveManifestButton = CreateButton("SaveManifestButton", saveRow, "保存配置", SaveSelectedManifest, 230f, 58f);
+			_calculateDurationButton = CreateButton("CalculateDurationButton", saveRow, "计算时长", OnCalculateDurationClicked, 160f, 58f);
 			_statusText = CreateText("StatusText", saveRow, string.Empty, 21, FontStyles.Normal, TextAlignmentOptions.Right);
 			_statusText.raycastTarget = false;
 			LayoutElement statusLayout = _statusText.gameObject.AddComponent<LayoutElement>();
@@ -420,16 +462,25 @@ namespace Sekai.CustomMusicScoreManager
 			_settingNoteSpeedInput = CreateInputField(settingsContent, "音符流速", "1.0 - 12.0");
 			_settingTimingAdjustInput = CreateInputField(settingsContent, "判定偏移", "-20.0 - 20.0");
 			_settingNoteShowRateInput = CreateInputField(settingsContent, "上隐挡板", "0 - 100");
+			_settingBackgroundBrightnessInput = CreateInputField(settingsContent, "背景亮度", "0 - 100");
 			_settingNoteLineAlphaInput = CreateInputField(settingsContent, "长条线不透明度", "10 - 100");
 			_settingGuideLineAlphaInput = CreateInputField(settingsContent, "Guide线不透明度", "10 - 100");
+			_settingJudgeLineAlphaInput = CreateInputField(settingsContent, "判定线不透明度", "0 - 100");
+			CreateSettingAutoSaveIntervalSelector(settingsContent);
 			CreateSettingNoteSkinSelector(settingsContent);
 			CreateSettingNoteSeSelector(settingsContent);
 			CreateSettingNoteEffectSelector(settingsContent);
 			CreateSettingSimultaneousLineSelector(settingsContent);
 			CreateSettingMusicInfoDisplayModeSelector(settingsContent);
+			CreateSettingMaimaiMusicInfoSeSelector(settingsContent);
+			CreateSettingAutoFakePerfectModeSelector(settingsContent);
+			CreateSettingAutoResultAnimationSelector(settingsContent);
+			CreateSettingScoreMakerPreviewModeSelector(settingsContent);
 			CreateSettingLiveBackgroundModeSelector(settingsContent);
 			CreateSettingFastLateFlickSelector(settingsContent);
 			CreateSettingFullscreenSelector(settingsContent);
+			CreateSettingBackupSelector(settingsContent);
+			CreateSettingRestoreSelector(settingsContent);
 
 			RectTransform buttonRow = CreateRect("ButtonRow", dialog);
 			LayoutElement buttonRowLayout = buttonRow.gameObject.AddComponent<LayoutElement>();
@@ -468,7 +519,11 @@ namespace Sekai.CustomMusicScoreManager
 		private void OpenSettings()
 		{
 			ApplicationLocalSettings localSettings = ApplicationLocalSettings.LoadFromStorage();
-			ApplicationLocalSettings.VolumeSettings liveVolume = localSettings.LiveVolume ?? localSettings.SetupLiveVolume();
+			if (localSettings.LiveVolume == null)
+			{
+				localSettings.SetupLiveVolume();
+			}
+			ApplicationLocalSettings.VolumeSettings liveVolume = localSettings.LiveVolume;
 			LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
 
 			RefreshLanguageDropdownLabel();
@@ -478,18 +533,125 @@ namespace Sekai.CustomMusicScoreManager
 			_settingNoteSpeedInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.NoteSpeed));
 			_settingTimingAdjustInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.TimingAdjustData));
 			_settingNoteShowRateInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData._noteShowRate * 100f));
+			_settingBackgroundBrightnessInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.Brightness * 100f));
 			_settingNoteLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetNoteAlpha() * 100f));
 			_settingGuideLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetGuideAlpha() * 100f));
+			_settingJudgeLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetJudgeLineAlpha() * 100f));
+			SetAutoSaveInterval(liveSettingData.AutoSaveIntervalIndex);
+			SetScoreMakerPreviewMode(liveSettingData.ScoreMakerPreviewModeIndex);
 			SetSettingNoteSkinIndex(liveSettingData.NoteSkinIndex);
 			SetSettingNoteSeIndex(liveSettingData.NoteSeIndex);
 			SetSettingNoteEffectIndex(liveSettingData.NoteEffect);
 			SetSettingSimultaneousLine(liveSettingData.UseSimultaneousPushingLine);
 			SetSettingMusicInfoDisplayMode(liveSettingData.CustomMusicScoreMusicInfoDisplayMode ?? LiveSettingData.MusicInfoDisplayModeCustomScore);
+			SetSettingMaimaiMusicInfoSe(liveSettingData.UseMaimaiMusicInfoSe);
+			SetSettingAutoFakePerfectMode(liveSettingData.CustomMusicScoreAutoFakePerfectMode ?? LiveSettingData.AutoFakePerfectModeAuto);
+			SetSettingAutoResultAnimation(liveSettingData.AutoResultAnimationMode);
 			SetSettingLiveBackgroundMode(liveSettingData.CustomMusicScoreLiveBackgroundMode ?? LiveSettingData.CustomMusicScoreBackgroundMode2DMV);
 			SetSettingFastLateFlick(liveSettingData.IsFastLateFlick);
 			SetSettingFullscreen(localSettings.FullscreenEnabled ?? Screen.fullScreen);
 			_settingsOverlay.gameObject.SetActive(true);
 			_settingsOverlay.SetAsLastSibling();
+		}
+
+		private void CloseSettingsAndReturnToEditor()
+		{
+			UnityEngine.Debug.Log("CloseSettingsAndReturnToEditor called");
+			if (_settingsOverlay != null)
+			{
+				_settingsOverlay.gameObject.SetActive(false);
+			}
+			UnityEngine.Debug.Log("Settings closed, now returning to editor");
+			// Return to editor with saved state
+			OpenEditorAfterSettingsClosed();
+		}
+
+		public static void OpenSettingsAfterReturnFromEditor()
+		{
+			UnityEngine.Debug.Log("OpenSettingsAfterReturnFromEditor called");
+			// Open settings (this method is called on the instance itself)
+			var screenLayer = UnityEngine.Object.FindObjectOfType<ScreenLayerCustomMusicScoreManager>();
+			UnityEngine.Debug.Log("ScreenLayer found: " + (screenLayer != null));
+			if (screenLayer != null)
+			{
+				screenLayer.OpenSettings();
+				UnityEngine.Debug.Log("Settings opened");
+				// Override buttons in the settings overlay by finding them recursively
+				OverrideButtonsInOverlay(screenLayer);
+			}
+		}
+
+		private static void OverrideButtonsInOverlay(ScreenLayerCustomMusicScoreManager screenLayer)
+		{
+			if (screenLayer._settingsOverlay == null) return;
+
+			// Find all buttons in the overlay
+			var buttons = screenLayer._settingsOverlay.GetComponentsInChildren<UnityEngine.UI.Button>(true);
+			UnityEngine.Debug.Log("Found " + buttons.Length + " buttons in overlay");
+
+			foreach (var button in buttons)
+			{
+				string buttonName = button.name;
+				UnityEngine.Debug.Log("Button name: " + buttonName);
+
+				// Try to find text to determine which button this is
+				string buttonText = "";
+				var textComponent = button.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+				if (textComponent != null)
+				{
+					buttonText = textComponent.text;
+				}
+				var uiText = button.GetComponentInChildren<UnityEngine.UI.Text>();
+				if (uiText != null)
+				{
+					buttonText = uiText.text;
+				}
+				UnityEngine.Debug.Log("Button text: " + buttonText);
+
+				button.onClick.RemoveAllListeners();
+				if (buttonName == "CancelButton" || buttonText == "取消" || buttonText == "Cancel")
+				{
+					button.onClick.AddListener(() => screenLayer.CloseSettingsAndReturnToEditor());
+					UnityEngine.Debug.Log("Cancel button listener added");
+				}
+				else if (buttonName == "SaveButton" || buttonText == "保存" || buttonText == "Save")
+				{
+					button.onClick.AddListener(() => screenLayer.SaveSettingsAndReturnToEditor());
+					UnityEngine.Debug.Log("Save button listener added");
+				}
+			}
+		}
+
+		private void SaveSettingsAndReturnToEditor()
+		{
+			UnityEngine.Debug.Log("SaveSettingsAndReturnToEditor called");
+			// Save all settings (this includes custom music score settings)
+			SaveSettings();
+			UnityEngine.Debug.Log("Settings saved, now returning to editor");
+			// Close settings and return to editor
+			CloseSettingsAndReturnToEditor();
+		}
+
+		private void OpenEditorAfterSettingsClosed()
+		{
+			UnityEngine.Debug.Log("OpenEditorAfterSettingsClosed called");
+			// Get the saved state before clearing
+			var savedBootData = Sekai.MusicScoreMaker.Ingame.Presenters.MusicScoreMakerEntryPoint.BootDataForSettingsReturn;
+			UnityEngine.Debug.Log("SavedBootData: " + (savedBootData != null));
+
+			// Clear the saved state to prevent reuse
+			Sekai.MusicScoreMaker.Ingame.Presenters.MusicScoreMakerEntryPoint.BootDataForSettingsReturn = null;
+
+			// Push the editor with saved state
+			if (savedBootData != null)
+			{
+				UnityEngine.Debug.Log("Pushing editor screen");
+				ScreenManager.Instance?.PushUIScreen(MenuScreenType.MusicScoreMaker, savedBootData, false);
+			}
+			else
+			{
+				UnityEngine.Debug.LogWarning("No saved boot data found, cannot return to editor");
+			}
 		}
 
 		private void CloseSettings()
@@ -520,6 +682,11 @@ namespace Sekai.CustomMusicScoreManager
 				LiveConfig.MinNoteShowRate,
 				LiveConfig.MaxNoteShowRate,
 				liveSettingData._noteShowRate * 100f));
+			liveSettingData.Brightness = ParseClampedSetting(
+				_settingBackgroundBrightnessInput.text,
+				0f,
+				100f,
+				liveSettingData.Brightness * 100f) / 100f;
 			liveSettingData.NoteAlpha = ParseClampedSetting(
 				_settingNoteLineAlphaInput.text,
 				MinVisualAlphaPercent,
@@ -530,11 +697,21 @@ namespace Sekai.CustomMusicScoreManager
 				MinVisualAlphaPercent,
 				MaxVisualAlphaPercent,
 				liveSettingData.GetGuideAlpha() * 100f) / 100f;
+			liveSettingData.JudgeLineAlpha = ParseClampedSetting(
+				_settingJudgeLineAlphaInput.text,
+				0f,
+				MaxVisualAlphaPercent,
+				liveSettingData.GetJudgeLineAlpha() * 100f) / 100f;
 			liveSettingData.NoteSkinIndex = _settingNoteSkinIndex;
+			liveSettingData.AutoSaveIntervalIndex = _settingAutoSaveIntervalIndex;
+			liveSettingData.ScoreMakerPreviewModeIndex = _settingScoreMakerPreviewModeIndex;
 			liveSettingData.NoteSeIndex = _settingNoteSeIndex;
 			liveSettingData.NoteEffect = _settingNoteEffectIndex;
 			liveSettingData.UseSimultaneousPushingLine = _settingSimultaneousLineEnabled;
 			liveSettingData.CustomMusicScoreMusicInfoDisplayMode = _settingMusicInfoDisplayMode;
+			liveSettingData.UseMaimaiMusicInfoSe = _settingUseMaimaiMusicInfoSeEnabled;
+			liveSettingData.CustomMusicScoreAutoFakePerfectMode = _settingAutoFakePerfectMode;
+			liveSettingData.CustomMusicScoreAutoResultAnimation = _settingAutoResultAnimation;
 			liveSettingData.CustomMusicScoreLiveBackgroundMode = _settingLiveBackgroundMode;
 			liveSettingData.IsFastLateFlick = _settingFastLateFlickEnabled;
 			if (ShouldShowDesktopFullscreenSetting())
@@ -551,27 +728,37 @@ namespace Sekai.CustomMusicScoreManager
 			SoundManager.Instance.SetupVolume(1f, liveVolume.Bgm, liveVolume.Se, liveVolume.Voice);
 			LiveConfig.LongNoteAlpha = liveSettingData.GetNoteAlpha();
 			LiveConfig.GuideAlpha = liveSettingData.GetGuideAlpha();
+			LiveConfig.JudgeLineAlpha = liveSettingData.GetJudgeLineAlpha();
 			LiveConfig.SetNoteSkinAssetBundleName(liveSettingData.NoteSkinIndex);
 			LiveConfig.SetNoteSeName(liveSettingData.NoteSeIndex);
 			LiveConfig.SetNoteEffectName(liveSettingData.NoteEffect);
+			LiveConfig.ScoreMakerPreviewModeIndex = liveSettingData.ScoreMakerPreviewModeIndex;
 
 			_settingLiveBgmInput.SetTextWithoutNotify(FormatSettingValue(liveVolume.Bgm));
 			_settingLiveSeInput.SetTextWithoutNotify(FormatSettingValue(liveVolume.Se));
 			_settingNoteSpeedInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.NoteSpeed));
 			_settingTimingAdjustInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.TimingAdjustData));
 			_settingNoteShowRateInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData._noteShowRate * 100f));
+			_settingBackgroundBrightnessInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.Brightness * 100f));
 			_settingNoteLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetNoteAlpha() * 100f));
 			_settingGuideLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetGuideAlpha() * 100f));
+			_settingJudgeLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetJudgeLineAlpha() * 100f));
+			SetAutoSaveInterval(liveSettingData.AutoSaveIntervalIndex);
+			SetScoreMakerPreviewMode(liveSettingData.ScoreMakerPreviewModeIndex);
 			SetSettingNoteSkinIndex(liveSettingData.NoteSkinIndex);
 			SetSettingNoteSeIndex(liveSettingData.NoteSeIndex);
 			SetSettingNoteEffectIndex(liveSettingData.NoteEffect);
 			SetSettingSimultaneousLine(liveSettingData.UseSimultaneousPushingLine);
 			SetSettingMusicInfoDisplayMode(liveSettingData.CustomMusicScoreMusicInfoDisplayMode ?? LiveSettingData.MusicInfoDisplayModeCustomScore);
+			SetSettingMaimaiMusicInfoSe(liveSettingData.UseMaimaiMusicInfoSe);
+			SetSettingAutoFakePerfectMode(liveSettingData.CustomMusicScoreAutoFakePerfectMode ?? LiveSettingData.AutoFakePerfectModeAuto);
+			SetSettingAutoResultAnimation(liveSettingData.AutoResultAnimationMode);
 			SetSettingLiveBackgroundMode(liveSettingData.CustomMusicScoreLiveBackgroundMode ?? LiveSettingData.CustomMusicScoreBackgroundMode2DMV);
 			SetSettingFastLateFlick(liveSettingData.IsFastLateFlick);
 			SetSettingFullscreen(localSettings.FullscreenEnabled ?? Screen.fullScreen);
 			CloseSettings();
 			SetLocalizedStatus("manager.status.settings_saved");
+			ShowSuccessDialog(LocalizationManager.Get("manager.status.settings_saved"));
 		}
 
 		private static float ParseClampedSetting(string text, float min, float max, float fallback)
@@ -605,6 +792,7 @@ namespace Sekai.CustomMusicScoreManager
 			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
 			rowLayout.preferredHeight = 58f;
 			rowLayout.minHeight = 58f;
+
 			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
 			rowGroup.spacing = 16f;
 			rowGroup.childAlignment = TextAnchor.MiddleLeft;
@@ -671,6 +859,87 @@ namespace Sekai.CustomMusicScoreManager
 			if (string.Equals(language, LocalizationManager.SimplifiedChinese, StringComparison.OrdinalIgnoreCase)) return "简体中文";
 			if (string.Equals(language, LocalizationManager.Japanese, StringComparison.OrdinalIgnoreCase)) return "日本語";
 			return "English";
+		}
+
+		private void CreateSettingAutoSaveIntervalSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("AutoSaveIntervalSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+			TextMeshProUGUI title = CreateText("Label", row, "自动保存间隔", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+			Button button = CreateButton("Button", row, string.Empty, CycleAutoSaveInterval, 220f, 54f);
+			_settingAutoSaveIntervalLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetAutoSaveInterval(0);
+		}
+
+		private void CycleAutoSaveInterval()
+		{
+			SetAutoSaveInterval((_settingAutoSaveIntervalIndex + 1) % AutoSaveIntervalTypeCount);
+		}
+
+		private void SetAutoSaveInterval(int index)
+		{
+			_settingAutoSaveIntervalIndex = Mathf.Clamp(index, 0, AutoSaveIntervalTypeCount - 1);
+			if (_settingAutoSaveIntervalLabel != null)
+			{
+				_settingAutoSaveIntervalLabel.text = AutoSaveIntervalOptions[_settingAutoSaveIntervalIndex];
+			}
+		}
+
+		private void CreateSettingScoreMakerPreviewModeSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("ScoreMakerPreviewModeSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "制谱器预览方式", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, string.Empty, CycleScoreMakerPreviewMode, 220f, 54f);
+			_settingScoreMakerPreviewModeLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetScoreMakerPreviewMode(0);
+		}
+
+		private void CycleScoreMakerPreviewMode()
+		{
+			SetScoreMakerPreviewMode((_settingScoreMakerPreviewModeIndex + 1) % ScoreMakerPreviewModeTypeCount);
+		}
+
+		private void SetScoreMakerPreviewMode(int index)
+		{
+			_settingScoreMakerPreviewModeIndex = Mathf.Clamp(index, 0, ScoreMakerPreviewModeTypeCount - 1);
+			LiveConfig.ScoreMakerPreviewModeIndex = _settingScoreMakerPreviewModeIndex;
+			if (_settingScoreMakerPreviewModeLabel != null)
+			{
+				_settingScoreMakerPreviewModeLabel.text = ScoreMakerPreviewModeOptions[_settingScoreMakerPreviewModeIndex];
+			}
 		}
 
 		private void CreateSettingNoteSkinSelector(Transform parent)
@@ -866,22 +1135,171 @@ namespace Sekai.CustomMusicScoreManager
 
 		private void CycleSettingMusicInfoDisplayMode()
 		{
-			int nextMode = _settingMusicInfoDisplayMode == LiveSettingData.MusicInfoDisplayModeCustomScore
-				? LiveSettingData.MusicInfoDisplayModeNormal
-				: LiveSettingData.MusicInfoDisplayModeCustomScore;
+			int nextMode;
+			switch (_settingMusicInfoDisplayMode)
+			{
+				case LiveSettingData.MusicInfoDisplayModeNormal:
+					nextMode = LiveSettingData.MusicInfoDisplayModeCustomScore;
+					break;
+				case LiveSettingData.MusicInfoDisplayModeCustomScore:
+					nextMode = LiveSettingData.MusicInfoDisplayModeSkip;
+					break;
+				case LiveSettingData.MusicInfoDisplayModeSkip:
+				default:
+					nextMode = LiveSettingData.MusicInfoDisplayModeNormal;
+					break;
+			}
 			SetSettingMusicInfoDisplayMode(nextMode);
 		}
 
 		private void SetSettingMusicInfoDisplayMode(int mode)
 		{
-			_settingMusicInfoDisplayMode = mode == LiveSettingData.MusicInfoDisplayModeNormal
-				? LiveSettingData.MusicInfoDisplayModeNormal
-				: LiveSettingData.MusicInfoDisplayModeCustomScore;
+			_settingMusicInfoDisplayMode = mode;
 			if (_settingMusicInfoDisplayModeLabel != null)
 			{
-				_settingMusicInfoDisplayModeLabel.text = _settingMusicInfoDisplayMode == LiveSettingData.MusicInfoDisplayModeCustomScore
-					? LocalizationManager.Get("settings.custom_mode")
-					: LocalizationManager.Get("settings.normal_mode");
+				_settingMusicInfoDisplayModeLabel.text = _settingMusicInfoDisplayMode switch
+				{
+					LiveSettingData.MusicInfoDisplayModeCustomScore => LocalizationManager.Get("settings.custom_mode"),
+					LiveSettingData.MusicInfoDisplayModeSkip => LocalizationManager.Get("settings.skip"),
+					_ => LocalizationManager.Get("settings.normal_mode")
+				};
+			}
+		}
+
+		private void CreateSettingMaimaiMusicInfoSeSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("MaimaiMusicInfoSeSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "舞萌音效", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, string.Empty, CycleSettingMaimaiMusicInfoSe, 220f, 54f);
+			_settingUseMaimaiMusicInfoSeLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetSettingMaimaiMusicInfoSe(false);
+		}
+
+		private void CycleSettingMaimaiMusicInfoSe()
+		{
+			SetSettingMaimaiMusicInfoSe(!_settingUseMaimaiMusicInfoSeEnabled);
+		}
+
+		private void SetSettingMaimaiMusicInfoSe(bool enabled)
+		{
+			_settingUseMaimaiMusicInfoSeEnabled = enabled;
+			if (_settingUseMaimaiMusicInfoSeLabel != null)
+			{
+				_settingUseMaimaiMusicInfoSeLabel.text = enabled ? "开启" : "关闭";
+			}
+		}
+
+		private void CreateSettingAutoFakePerfectModeSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("AutoFakePerfectModeSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "Auto模式", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, string.Empty, CycleSettingAutoFakePerfectMode, 220f, 54f);
+			_settingAutoFakePerfectModeLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetSettingAutoFakePerfectMode(LiveSettingData.AutoFakePerfectModeAuto);
+		}
+
+		private void CycleSettingAutoFakePerfectMode()
+		{
+			int nextMode = _settingAutoFakePerfectMode == LiveSettingData.AutoFakePerfectModeAuto
+				? LiveSettingData.AutoFakePerfectModeFakePerfect
+				: LiveSettingData.AutoFakePerfectModeAuto;
+			SetSettingAutoFakePerfectMode(nextMode);
+		}
+
+		private void SetSettingAutoFakePerfectMode(int mode)
+		{
+			_settingAutoFakePerfectMode = mode;
+			if (_settingAutoFakePerfectModeLabel != null)
+			{
+				_settingAutoFakePerfectModeLabel.text = _settingAutoFakePerfectMode == LiveSettingData.AutoFakePerfectModeFakePerfect
+					? "伪Perfect"
+					: "Auto模式";
+			}
+		}
+
+		private void CreateSettingAutoResultAnimationSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("AutoResultAnimationSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "Auto结算动画", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, string.Empty, CycleSettingAutoResultAnimation, 220f, 54f);
+			_settingAutoResultAnimationLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			SetSettingAutoResultAnimation(LiveSettingData.AutoResultAnimationClear);
+		}
+
+		private void CycleSettingAutoResultAnimation()
+		{
+			int nextMode = (_settingAutoResultAnimation + 1) % 5;
+			SetSettingAutoResultAnimation(nextMode);
+		}
+
+		private void SetSettingAutoResultAnimation(int mode)
+		{
+			_settingAutoResultAnimation = mode;
+			if (_settingAutoResultAnimationLabel != null)
+			{
+				_settingAutoResultAnimationLabel.text = mode switch
+				{
+					LiveSettingData.AutoResultAnimationNone => "不结算",
+					LiveSettingData.AutoResultAnimationAllPerfect => "AP动画",
+					LiveSettingData.AutoResultAnimationFullCombo => "FC动画",
+					LiveSettingData.AutoResultAnimationClear => "Clear动画",
+					LiveSettingData.AutoResultAnimationFinish => "Finish动画",
+					_ => "不结算"
+				};
 			}
 		}
 
@@ -1013,6 +1431,333 @@ namespace Sekai.CustomMusicScoreManager
 			if (_settingFullscreenLabel != null)
 			{
 				_settingFullscreenLabel.text = LocalizationManager.Get(enabled ? "settings.on" : "settings.off");
+			}
+		}
+
+		private void CreateSettingBackupSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("BackupSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "应用程序备份", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, "点击开始", OnBackupButtonClick, 220f, 54f);
+		}
+
+		private void OnBackupButtonClick()
+		{
+			Debug.Log("[UI] OnBackupButtonClick called");
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				() => OnBackupConfirmed(),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.backup"));
+		}
+
+		private void OnBackupConfirmed()
+		{
+			Debug.Log("[UI] OnBackupConfirmed called, starting backup service");
+			BackupService.SetCallbacks(OnBackupProgress, OnBackupComplete);
+			BackupService.StartBackup(this.gameObject.name, "OnBackupComplete", "OnBackupProgress");
+		}
+
+		private void OnBackupProgress(string progress)
+		{
+			Debug.Log("[UI] OnBackupProgress called: " + progress);
+			if (_pleaseWaitDialog != null)
+			{
+				_pleaseWaitDialog.SetMessageBodyText(progress);
+			}
+			else
+			{
+				Debug.Log("[UI] Creating please wait dialog");
+				_pleaseWaitDialog = ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+					DialogType.Common1ButtonDialog,
+					null,
+					"WORD_DECIDE",
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					false);
+				_pleaseWaitDialog?.SetMessageBodyText(progress);
+			}
+		}
+
+		private void OnBackupComplete(string result)
+		{
+			Debug.Log("[UI] OnBackupComplete called: " + result);
+			_pleaseWaitDialog?.Close();
+			_pleaseWaitDialog = null;
+			if (result.StartsWith("success:"))
+			{
+				string backupPath = result.Substring("success:".Length);
+				Debug.Log("[UI] Backup succeeded, showing share dialog for: " + backupPath);
+				ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+					DialogType.Common2ButtonDialog,
+					() => OnShareBackupConfirmed(backupPath),
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					true)?.SetMessageBodyText(LocalizationManager.Format("manager.confirm.backup_share", backupPath));
+			}
+			else if (result == "cancelled")
+			{
+				SetLocalizedStatus("manager.status.backup_cancelled");
+			}
+			else
+			{
+				ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+					DialogType.Common1ButtonDialog,
+					null,
+					"WORD_DECIDE",
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					true)?.SetMessageBodyText(LocalizationManager.Format("manager.dialog.backup_failed", result));
+			}
+		}
+
+		private void OnShareBackupConfirmed(string backupPath)
+		{
+			Debug.Log("[UI] OnShareBackupConfirmed called, path: " + backupPath);
+			BackupService.ShareBackup(backupPath);
+		}
+
+		private void CreateSettingRestoreSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("RestoreSelector", parent);
+			LayoutElement rowLayout = row.gameObject.AddComponent<LayoutElement>();
+			rowLayout.preferredHeight = 58f;
+			rowLayout.minHeight = 58f;
+
+			HorizontalLayoutGroup rowGroup = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			rowGroup.spacing = 16f;
+			rowGroup.childAlignment = TextAnchor.MiddleLeft;
+			rowGroup.childControlWidth = true;
+			rowGroup.childControlHeight = true;
+			rowGroup.childForceExpandWidth = false;
+			rowGroup.childForceExpandHeight = false;
+
+			TextMeshProUGUI title = CreateText("Label", row, "备份内容恢复", 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = 180f;
+			titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = 58f;
+			titleLayout.minHeight = 58f;
+
+			Button button = CreateButton("Button", row, "导入备份", OnRestoreButtonClick, 220f, 54f);
+		}
+
+		private void OnRestoreButtonClick()
+		{
+			// Use native file picker for all non-Standalone platforms
+			// StandaloneFileBrowser is unreliable on Android
+			if (Application.platform == RuntimePlatform.WindowsEditor ||
+			    Application.platform == RuntimePlatform.WindowsPlayer ||
+			    Application.platform == RuntimePlatform.OSXEditor ||
+			    Application.platform == RuntimePlatform.OSXPlayer ||
+			    Application.platform == RuntimePlatform.LinuxEditor ||
+			    Application.platform == RuntimePlatform.LinuxPlayer)
+			{
+				string[] paths = null;
+				try
+				{
+					paths = StandaloneFileBrowser.OpenFilePanel("选择备份文件", "", "zip", false);
+				}
+				catch (Exception ex)
+				{
+					Debug.LogWarning("[UI] StandaloneFileBrowser failed: " + ex.Message);
+				}
+
+				if (paths != null && paths.Length > 0 && !string.IsNullOrEmpty(paths[0]))
+				{
+					_restoreBackupPath = paths[0];
+					ShowRestoreScopeDialog();
+					return;
+				}
+				// Fallback to native picker if StandaloneFileBrowser failed or returned empty
+			}
+
+#if UNITY_ANDROID
+			// Use ShareExportHelper for Android
+			OpenFileForRestore();
+#else
+			// Use NativeFilePicker for iOS and other platforms
+			PickNativeFileForRestore();
+#endif
+		}
+
+		private void PickNativeFileForRestore()
+		{
+			if (NativeFilePicker.IsFilePickerBusy())
+			{
+				SetLocalizedStatus("manager.status.picker_busy");
+				return;
+			}
+
+			Debug.Log("[UI] PickNativeFileForRestore: Calling NativeFilePicker.PickFile");
+			SetLocalizedStatus("manager.status.choose_backup");
+			NativeFilePicker.PickFile(path =>
+			{
+				if (this == null)
+				{
+					return;
+				}
+
+				Debug.Log("[UI] PickNativeFileForRestore callback, path: " + path);
+				if (string.IsNullOrEmpty(path))
+				{
+					SetLocalizedStatus("manager.status.backup_selection_cancelled");
+					return;
+				}
+
+				_restoreBackupPath = path;
+				ShowRestoreScopeDialog();
+			}, CreateNativeFileTypes("zip"));
+		}
+
+#if UNITY_ANDROID
+		private void OpenFileForRestore()
+		{
+			Debug.Log("[UI] OpenFileForRestore: Calling ShareExportHelper.OpenFile");
+			SetLocalizedStatus("manager.status.choose_backup");
+			using (AndroidJavaClass helper = new AndroidJavaClass("com.opensekai.ShareExportHelper"))
+			{
+				helper.CallStatic("OpenFile", gameObject.name, "OnOpenFileForRestoreComplete");
+			}
+		}
+
+		private void OnOpenFileForRestoreComplete(string result)
+		{
+			Debug.Log("[UI] OnOpenFileForRestoreComplete: " + result);
+			if (string.IsNullOrEmpty(result))
+			{
+				SetLocalizedStatus("manager.status.backup_selection_cancelled");
+				return;
+			}
+
+			if (result.StartsWith("success:"))
+			{
+				_restoreBackupPath = result.Substring("success:".Length);
+				Debug.Log("[UI] File restored to: " + _restoreBackupPath);
+				ShowRestoreScopeDialog();
+			}
+			else if (result == "cancelled")
+			{
+				SetLocalizedStatus("manager.status.backup_selection_cancelled");
+			}
+			else
+			{
+				SetLocalizedStatus("manager.status.backup_file_failed", result);
+			}
+		}
+#endif
+
+		private void ShowRestoreScopeDialog()
+		{
+			// Use localization keys for button labels: "RESTORE_SCORES" and "RESTORE_ALL"
+			// Use message key "MSG_RESTORE_SCOPE" for dialog body text
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				"MSG_RESTORE_SCOPE",
+				"RESTORE_SCORES",
+				"RESTORE_ALL",
+				() => StartRestore(false),
+				() => OnRestoreAllSelected(),
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true);
+		}
+
+		private void OnRestoreAllSelected()
+		{
+			// Use message key "MSG_RESTORE_ALL_CONFIRM" for dialog body text
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				"MSG_RESTORE_ALL_CONFIRM",
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => StartRestore(true),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true);
+		}
+
+		private string _restoreBackupPath;
+		private Common1ButtonDialog _pleaseWaitDialog;
+
+		private void StartRestore(bool restoreAll)
+		{
+			BackupService.StartRestore(_restoreBackupPath, restoreAll, this.gameObject.name, "OnRestoreComplete", "OnRestoreProgress");
+		}
+
+		private void OnRestoreProgress(string progress)
+		{
+			if (_pleaseWaitDialog != null)
+			{
+				_pleaseWaitDialog.SetMessageBodyText(progress);
+			}
+			else
+			{
+				_pleaseWaitDialog = ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+					DialogType.Common1ButtonDialog,
+					null,
+					"WORD_DECIDE",
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					false);
+				_pleaseWaitDialog?.SetMessageBodyText(progress);
+			}
+		}
+
+		private void OnRestoreComplete(string result)
+		{
+			_pleaseWaitDialog?.Close();
+			_pleaseWaitDialog = null;
+			if (result == "success")
+			{
+				ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+					DialogType.Common1ButtonDialog,
+					null,
+					"WORD_DECIDE",
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_complete"));
+			}
+			else if (result == "cancelled")
+			{
+				SetLocalizedStatus("manager.status.restore_cancelled");
+			}
+			else
+			{
+				ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+					DialogType.Common1ButtonDialog,
+					null,
+					"WORD_DECIDE",
+					null,
+					DisplayLayerType.Layer_Dialog,
+					DialogSize.Manual,
+					true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_failed"));
 			}
 		}
 
@@ -1179,6 +1924,13 @@ namespace Sekai.CustomMusicScoreManager
 			return 1;
 		}
 
+		private void RefreshButtonClicked()
+		{
+			RefreshList();
+			string statusMessage = "已加载 " + _items.Count.ToString(CultureInfo.InvariantCulture) + " 个谱面。";
+			ShowSuccessDialog(statusMessage);
+		}
+
 		private void RefreshList()
 		{
 			_items = CustomMusicScoreManagerService.LoadItems();
@@ -1269,6 +2021,7 @@ namespace Sekai.CustomMusicScoreManager
 			_deleteButton.interactable = hasSelection;
 			_exportButton.interactable = hasSelection;
 			_saveManifestButton.interactable = hasSelection;
+			_calculateDurationButton.interactable = hasSelection && item.HasAudio;
 			_audioSelectButton.interactable = hasSelection;
 			_jacketSelectButton.interactable = hasSelection;
 			_scoreSelectButton.interactable = hasSelection;
@@ -1518,7 +2271,8 @@ namespace Sekai.CustomMusicScoreManager
 				bootData.MusicData.CustomPlayLevel = entry.Manifest.playLevel;
 				bootData.MusicData.MusicScore = musicScore;
 				bootData.MusicData.StartMusicTimeMs = 0L;
-				bootData.MusicData.PlayStartEffectEnabled = true;
+				// Skip MusicInfo display if skip mode is enabled
+				bootData.MusicData.PlayStartEffectEnabled = !(liveSettingData?.SkipsCustomMusicScoreMusicInfo ?? false);
 			}
 
 			return bootData;
@@ -1589,6 +2343,7 @@ namespace Sekai.CustomMusicScoreManager
 			_selected = entry == null ? null : new CustomMusicScoreManagerItem(entry, DateTime.Now, true, File.Exists(entry.ScorePath), File.Exists(entry.AudioPath), File.Exists(entry.JacketPath));
 			RefreshList();
 			SetLocalizedStatus("manager.status.duplicated");
+			ShowSuccessDialog(LocalizationManager.Get("manager.status.duplicated"));
 		}
 
 		private void DeleteSelected()
@@ -1652,12 +2407,154 @@ namespace Sekai.CustomMusicScoreManager
 			}
 
 			string path = CustomMusicScoreManagerService.ExportZip(_selected.Entry, destination);
-			SetLocalizedStatus(string.IsNullOrEmpty(path) ? "manager.status.export_failed" : "manager.status.exported", path);
+			HandleExportResult(path);
 #elif UNITY_ANDROID || UNITY_IOS
 			ExportSelectedNative();
 #else
 			string path = CustomMusicScoreManagerService.ExportZip(_selected.Entry);
-			SetLocalizedStatus(string.IsNullOrEmpty(path) ? "manager.status.export_failed" : "manager.status.exported", path);
+			HandleExportResult(path);
+#endif
+		}
+
+		private void HandleExportResult(string path)
+		{
+			if (string.IsNullOrEmpty(path))
+			{
+				SetLocalizedStatus("manager.status.export_failed");
+				ShowExportFailedDialog();
+				return;
+			}
+
+			SetLocalizedStatus("manager.status.exported", path);
+			AskShareAfterExport(path);
+		}
+
+		private void ShowExportFailedDialog()
+		{
+			ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+				DialogType.Common1ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.export_failed"));
+		}
+
+		private void AskShareAfterExport(string path)
+		{
+			Debug.Log("[UI] AskShareAfterExport called, path: " + path);
+			Common2ButtonDialog dialog = ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				() => OnShareConfirmed(path),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true);
+			dialog?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.share_score"));
+		}
+
+		private void OnShareConfirmed(string path)
+		{
+			Debug.Log("[UI] OnShareConfirmed called, path: " + path);
+			Debug.Log("[UI] UNITY_ANDROID: " +
+#if UNITY_ANDROID
+				"true"
+#else
+				"false"
+#endif
+			);
+			Debug.Log("[UI] UNITY_STANDALONE: " +
+#if UNITY_STANDALONE
+				"true"
+#else
+				"false"
+#endif
+			);
+#if UNITY_ANDROID
+			Debug.Log("[UI] Calling Android ShareFile");
+			using (AndroidJavaClass helper = new AndroidJavaClass("com.opensekai.ShareExportHelper"))
+			{
+				helper.CallStatic("ShareFile", path);
+			}
+#elif UNITY_STANDALONE || UNITY_EDITOR
+			Debug.Log("[UI] Calling OpenInExplorer");
+			OpenInExplorer(path);
+#endif
+		}
+
+		private void OpenInExplorer(string path)
+		{
+			Debug.Log("[OpenInExplorer] START, path: " + path);
+#if UNITY_STANDALONE || UNITY_EDITOR
+			try
+			{
+				Debug.Log("[OpenInExplorer] Inside UNITY_STANDALONE block");
+				string directory = Path.GetDirectoryName(path);
+				Debug.Log("[OpenInExplorer] directory: " + directory);
+				Debug.Log("[OpenInExplorer] Directory.Exists: " + Directory.Exists(directory));
+				if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+				{
+					// explorer.exe /select, requires backslashes
+					string normalizedPath = path.Replace("/", "\\");
+					Debug.Log("[OpenInExplorer] Launching explorer with: " + normalizedPath);
+					System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + normalizedPath + "\"");
+					Debug.Log("[OpenInExplorer] Explorer launched successfully");
+				}
+				else
+				{
+					Debug.LogWarning("[OpenInExplorer] Directory does not exist or path is invalid");
+				}
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError("[OpenInExplorer] Exception: " + ex.GetType().Name + ", " + ex.Message);
+				Debug.LogError("[OpenInExplorer] StackTrace: " + ex.StackTrace);
+				SetLocalizedStatus("manager.status.explorer_failed");
+			}
+#else
+			Debug.Log("[OpenInExplorer] Not on UNITY_STANDALONE || UNITY_EDITOR");
+#endif
+		}
+
+		private void ShareFileAndroid(string path)
+		{
+#if UNITY_ANDROID
+			try
+			{
+				using (AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent"))
+				{
+					using (AndroidJavaObject intentObject = new AndroidJavaObject("android.content.Intent"))
+					{
+						intentObject.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_SEND"));
+						intentObject.Call<AndroidJavaObject>("setType", "application/zip");
+
+						using (AndroidJavaClass uriClass = new AndroidJavaClass("android.net.Uri"))
+						{
+							using (AndroidJavaObject fileObject = new AndroidJavaObject("java.io.File", path))
+							{
+								using (AndroidJavaObject uriObject = uriClass.CallStatic<AndroidJavaObject>("fromFile", fileObject))
+								{
+									intentObject.Call<AndroidJavaObject>("putExtra", intentClass.GetStatic<string>("EXTRA_STREAM"), uriObject);
+									intentObject.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_GRANT_READ_URI_PERMISSION"));
+								}
+							}
+						}
+
+						using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+						{
+							using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+							{
+								currentActivity.Call("startActivity", intentObject);
+							}
+						}
+					}
+				}
+			}
+			catch (Exception)
+			{
+				SetLocalizedStatus("manager.status.share_failed");
+			}
 #endif
 		}
 
@@ -1702,6 +2599,7 @@ namespace Sekai.CustomMusicScoreManager
 				_selected = new CustomMusicScoreManagerItem(entry, DateTime.Now, true, File.Exists(entry.ScorePath), File.Exists(entry.AudioPath), File.Exists(entry.JacketPath));
 				RefreshList();
 				SetLocalizedStatus("manager.status.imported_score");
+				ShowSuccessDialog(LocalizationManager.Get("manager.status.imported_score"));
 			}
 			else
 			{
@@ -1854,7 +2752,51 @@ namespace Sekai.CustomMusicScoreManager
 		}
 #endif
 
-#if UNITY_ANDROID || UNITY_IOS
+#if UNITY_ANDROID
+		private void ExportSelectedNative()
+		{
+			_lastExportPath = CustomMusicScoreManagerService.ExportZip(_selected.Entry);
+			if (string.IsNullOrEmpty(_lastExportPath))
+			{
+				SetLocalizedStatus("manager.status.export_failed");
+				ShowExportFailedDialog();
+				return;
+			}
+
+			SetLocalizedStatus("manager.status.choose_export");
+			using (AndroidJavaClass helper = new AndroidJavaClass("com.opensekai.ShareExportHelper"))
+			{
+				helper.CallStatic("SaveAndShare", _lastExportPath, gameObject.name, "OnSaveAndShareComplete");
+			}
+		}
+
+		private void OnSaveAndShareComplete(string result)
+		{
+			string path = _lastExportPath;
+			if (string.IsNullOrEmpty(_selected?.Entry?.Manifest?.scoreTitle))
+			{
+				return;
+			}
+
+			string title = _selected.Entry.Manifest.scoreTitle;
+			if (result.StartsWith("success"))
+			{
+				SetLocalizedStatus("manager.status.exported", title);
+				if (!string.IsNullOrEmpty(path))
+				{
+					AskShareAfterExport(path);
+				}
+			}
+			else if (result == "cancelled")
+			{
+				SetLocalizedStatus("manager.status.export_cancelled");
+			}
+			else
+			{
+				SetLocalizedStatus("manager.status.export_failed_detail", result);
+			}
+		}
+#elif UNITY_IOS
 		private void ExportSelectedNative()
 		{
 			if (NativeFilePicker.IsFilePickerBusy())
@@ -1867,12 +2809,14 @@ namespace Sekai.CustomMusicScoreManager
 			if (string.IsNullOrEmpty(path))
 			{
 				SetLocalizedStatus("manager.status.export_failed");
+				ShowExportFailedDialog();
 				return;
 			}
 
 			if (!NativeFilePicker.CanExportFiles())
 			{
 				SetLocalizedStatus("manager.status.export_local", path);
+				AskShareAfterExport(path);
 				return;
 			}
 
@@ -1883,10 +2827,18 @@ namespace Sekai.CustomMusicScoreManager
 				{
 					return;
 				}
-
-				SetLocalizedStatus(success ? "manager.status.exported" : "manager.status.export_cancelled", path);
+				if (success)
+				{
+					SetLocalizedStatus("manager.status.exported", path);
+					AskShareAfterExport(path);
+				}
+				else
+				{
+					SetLocalizedStatus("manager.status.export_cancelled");
+				}
 			});
 		}
+#endif
 
 		private void PickNativeFile(string title, string cancelStatus, Action<string> onPicked, params string[] extensions)
 		{
@@ -1970,7 +2922,6 @@ namespace Sekai.CustomMusicScoreManager
 			}
 		}
 #endif
-#endif
 
 		private void ReplaceSelectedFile(
 			string sourcePath,
@@ -2006,7 +2957,318 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			CustomMusicScoreEntry savedEntry = SaveSelectedManifestFromForm(refreshList: true);
 			SetLocalizedStatus(savedEntry != null ? "manager.status.config_saved" : "manager.status.config_save_failed");
+			if (savedEntry != null)
+			{
+				ShowSuccessDialog(LocalizationManager.Get("manager.status.config_saved"));
+			}
 		}
+
+		private void OnCalculateDurationClicked()
+		{
+			ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+				DialogType.Common2ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				"WORD_CANCEL",
+				() => CalculateDurationAsync().Forget(),
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				allowCloseExternal: true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.calculate_duration"));
+		}
+
+		private async UniTaskVoid CalculateDurationAsync()
+		{
+			if (_selected?.Entry == null)
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			CustomMusicScoreEntry entry = _selected.Entry;
+			if (!File.Exists(entry.AudioPath))
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			SetLocalizedStatus("manager.status.loading_audio");
+			bool audioReady = await entry.RegisterAudioAsync(this.GetCancellationTokenOnDestroy());
+			if (!audioReady || entry.AudioLengthMs <= 0)
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+				return;
+			}
+
+			float audioSeconds = entry.AudioLengthMs / 1000f;
+			float fillerSec = entry.Manifest.fillerSec;
+			int calculatedDuration = Mathf.CeilToInt(audioSeconds - fillerSec + 2f);
+			calculatedDuration = Mathf.Max(1, calculatedDuration);
+
+			entry.Manifest.secForMusicScoreMaker = calculatedDuration;
+			CustomMusicScoreEntry savedEntry = CustomMusicScoreManagerService.SaveManifest(entry, entry.Manifest);
+			if (savedEntry != null)
+			{
+				_selected = new CustomMusicScoreManagerItem(
+					savedEntry,
+					DateTime.Now,
+					File.Exists(savedEntry.ManifestPath),
+					File.Exists(savedEntry.ScorePath),
+					File.Exists(savedEntry.AudioPath),
+					File.Exists(savedEntry.JacketPath));
+				LoadForm(savedEntry.Manifest);
+				RefreshList();
+				SetLocalizedStatus("manager.status.duration_calculated");
+				ShowSuccessDialog($"已自动计算，时长为：{calculatedDuration}秒");
+			}
+			else
+			{
+				ShowSuccessDialog("无法完成自动计算，请检查谱面数据");
+			}
+		}
+
+		private void OnGenerateVideoClicked()
+	{
+		Debug.Log("[UI] OnGenerateVideoClicked called");
+		ScreenManager.Instance?.Show2ButtonDialog<Common2ButtonDialog>(
+			DialogType.Common2ButtonDialog,
+			null,  // messageBodyKey (通过SetMessageBodyText设置)
+			"WORD_DECIDE",  // okButtonLabelKey
+			"WORD_CANCEL",  // cancelButtonLabelKey
+			() => StartVideoGeneration(),  // onClickOK
+			null,  // onClickCancel
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.generate_video"));
+	}
+
+	private void StartVideoGeneration()
+	{
+		Debug.Log("[UI] StartVideoGeneration called");
+
+#if UNITY_ANDROID
+		// Android平台：需要进行权限检查
+		Debug.Log("[UI] Android platform detected, checking permissions");
+		CheckVideoGenerationPermissions();
+#elif UNITY_STANDALONE_WIN || UNITY_EDITOR
+		// Windows平台或编辑器：直接进入创建启动数据流程
+		Debug.Log("[UI] Windows/Editor platform detected, proceeding with video generation");
+		CreateVideoGenerationStartupData();
+#else
+		// 其他平台暂不支持
+		Debug.LogWarning("[UI] Video generation not supported on this platform");
+		SetLocalizedStatus("manager.status.video_unsupported");
+#endif
+	}
+
+	private void CheckVideoGenerationPermissions()
+	{
+		Debug.Log("[UI] CheckVideoGenerationPermissions: Checking gallery permission");
+
+		// 检查是否已有相册权限
+		if (PermissionHelper.HasGalleryPermission())
+		{
+			Debug.Log("[UI] Gallery permission already granted, proceeding with video generation");
+			CreateVideoGenerationStartupData();
+			return;
+		}
+
+		// 申请相册权限
+		Debug.Log("[UI] Gallery permission not granted, requesting permission");
+		PermissionHelper.RequestGalleryPermission((granted) =>
+		{
+			if (granted)
+			{
+				// 权限申请成功，继续视频生成流程
+				Debug.Log("[UI] Gallery permission granted, proceeding with video generation");
+				CreateVideoGenerationStartupData();
+			}
+			else
+			{
+				// 权限申请失败，显示提示并返回首页
+				Debug.LogWarning("[UI] Gallery permission denied");
+				ShowPermissionDeniedDialog();
+			}
+		});
+	}
+
+	/// <summary>
+	/// 显示权限被拒绝的对话框，然后返回首页
+	/// </summary>
+	private void ShowPermissionDeniedDialog()
+	{
+		ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+			DialogType.Common1ButtonDialog,
+			null,  // messageBodyKey (通过SetMessageBodyText设置)
+			"WORD_OK",  // okButtonLabelKey
+			() =>
+			{
+				// 返回首页
+				Debug.Log("[UI] Permission denied, returning to home");
+				ReturnToHome();
+			},
+			DisplayLayerType.Layer_Dialog,
+			DialogSize.Manual,
+			true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.gallery_permission"));
+	}
+
+	/// <summary>
+	/// 返回首页
+	/// </summary>
+	private void ReturnToHome()
+	{
+		// 返回到谱面管理首页
+		try
+		{
+			MusicScoreMaker.Ingame.Utilities.MusicScoreMakerUtility.RequestTransitionToOutGame(MenuScreenType.MusicScoreMakerTop);
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[UI] ReturnToHome异常: {ex.Message}");
+			// 尝试使用ScreenManager直接切换
+			if (ScreenManager.Instance != null)
+			{
+				ScreenManager.Instance.ChangeUIScreen(MenuScreenType.MusicScoreMakerTop, false, true);
+			}
+		}
+	}
+
+	private void CreateVideoGenerationStartupData()
+	{
+		CreateVideoGenerationStartupDataAsync().Forget();
+	}
+
+	private async UniTask CreateVideoGenerationStartupDataAsync()
+	{
+		if (_selected?.Entry == null)
+		{
+			SetLocalizedStatus("manager.status.select_score");
+			return;
+		}
+
+		CustomMusicScoreEntry entry = SaveSelectedManifestFromForm(refreshList: false);
+		entry ??= CustomMusicScoreStorage.LoadEntry(_selected.Entry.RootDirectory);
+		if (entry == null)
+		{
+			SetLocalizedStatus("manager.status.score_load_failed");
+			RefreshList();
+			return;
+		}
+
+		if (!File.Exists(entry.ScorePath))
+		{
+			SetLocalizedStatus("manager.status.score_missing");
+			return;
+		}
+		if (!File.Exists(entry.AudioPath))
+		{
+			SetLocalizedStatus("manager.status.audio_missing");
+			return;
+		}
+
+		MusicScoreMakerData scoreData = entry.LoadScore();
+		if (scoreData == null)
+		{
+			SetLocalizedStatus("manager.status.score_file_failed");
+			return;
+		}
+		if (!HasPlayableNotes(scoreData))
+		{
+			SetLocalizedStatus("manager.status.no_notes");
+			return;
+		}
+
+		SetLocalizedStatus("manager.status.loading_audio");
+		bool audioReady = await entry.RegisterAudioAsync(this.GetCancellationTokenOnDestroy());
+		if (!audioReady)
+		{
+			SetLocalizedStatus("manager.status.audio_load_failed");
+			return;
+		}
+
+		VideoGenerationBootData bootData = CreateVideoGenerationBootData(entry, scoreData);
+		if (bootData == null)
+		{
+			SetLocalizedStatus("manager.status.video_play_data_failed");
+			return;
+		}
+
+		UserDataManager.Instance.FreeLiveBootData = bootData;
+		Sekai.Core.EntryPoint.PlayMode = Sekai.Core.PlayMode.SoloLive;
+		LiveTransitioner.SafeForceFinish(null);
+		ScreenManager.Instance?.PushUIScreen(MenuScreenType.LiveLoading, false);
+		SetLocalizedStatus("manager.status.starting_video");
+	}
+
+	private VideoGenerationBootData CreateVideoGenerationBootData(CustomMusicScoreEntry entry, MusicScoreMakerData scoreData)
+	{
+		if (entry == null || scoreData == null)
+		{
+			return null;
+		}
+
+		LiveBundleBuildData liveBundleBuildData = Resources.Load<LiveBundleBuildData>(LiveConfig.ConfigBundleNamePath);
+		MusicScore musicScore = scoreData.ToMusicScore(liveBundleBuildData);
+		int deckId = UserDataManager.Instance.SelectedDeckId;
+		MasterMusicDifficulty difficulty = CreateDirectPlayDifficulty(entry, musicScore);
+		string difficultyString = difficulty?.musicDifficulty ?? "master";
+		LiveSettingData liveSettingData = LiveSettingData.LoadFromStorage();
+		MusicCategory musicCategory = ResolveDirectPlayMusicCategory(liveSettingData);
+
+		// 创建VideoGenerationBootData实例
+		VideoGenerationBootData bootData = new VideoGenerationBootData(
+			entry.MusicId,
+			difficultyString,
+			0,
+			deckId,
+			LivePlayMode.Free,
+			LiveMusicData.CollaborationModeState.Off,
+			musicCategory);
+
+		bootData.LiveEventData = new LiveEventData(Array.Empty<IngameLotterySkill>(), Array.Empty<IngameComboCutin>(), deckId, true);
+		bootData.LiveSettingData = liveSettingData;
+		bootData.MVQualityType = bootData.LiveSettingData?.QualityType ?? Sekai.MVQualityType.Default;
+		bootData.MusicCategory = musicCategory;
+		bootData.IsAuto = true;
+		bootData.IsCustomMusicScore = true;
+		bootData.IsOfficialMusicScore = false;
+		bootData.ReturnScreenType = MenuScreenType.MusicScoreMakerTop;
+		bootData.canSkipDisplayMusicInfo = false;
+		bootData.ReleaseTransitionBeforeMusicStart = true;
+		bootData.CustomMusicScoreId = entry.Manifest.id;
+		bootData.CustomMusicScorePath = entry.RootDirectory;
+		bootData.CustomMusicScoreTitle = entry.Manifest.scoreTitle;
+		bootData.CustomMusicScoreAuthorName = entry.Manifest.userName;
+		bootData.CustomMusicScoreCollaborationLabel = entry.Manifest.collaborationLabel;
+
+		// 设置视频生成专用属性
+		bootData.IsVideoGenerationMode = true;
+		bootData.VideoGenerationSpeedMultiplier = 1; // 正常速度录制
+		bootData.VideoGenerationMuteAudio = false; // 不静音BGM，录制完整游戏原声（含谱面音乐）
+		bootData.VideoGenerationDisablePause = true;
+		bootData.VideoGenerationAudioPath = null; // 不使用后期添加音乐，直接使用录制的音频
+
+		if (bootData.MusicData != null)
+		{
+			bootData.MusicData.Music = CreateDirectPlayMusic(entry);
+			bootData.MusicData.Difficulty = difficulty;
+			bootData.MusicData.Vocal = CreateDirectPlayVocal(entry);
+			bootData.MusicData.Score = new MasterPlayLevelScore
+			{
+				liveType = LiveType.solo.ToString(),
+				playLevel = entry.Manifest.playLevel
+			};
+			bootData.MusicData.IsTestPlay = false;
+			bootData.MusicData.IsUseCustomScore = true;
+			bootData.MusicData.CustomPlayLevel = entry.Manifest.playLevel;
+			bootData.MusicData.MusicScore = musicScore;
+			bootData.MusicData.StartMusicTimeMs = 0L;
+			// Skip MusicInfo display if skip mode is enabled
+			bootData.MusicData.PlayStartEffectEnabled = !(liveSettingData?.SkipsCustomMusicScoreMusicInfo ?? false);
+		}
+
+		return bootData;
+	}
 
 		private CustomMusicScoreEntry SaveSelectedManifestFromForm(bool refreshList)
 		{
@@ -2194,7 +3456,6 @@ namespace Sekai.CustomMusicScoreManager
 				_statusText.text = message ?? string.Empty;
 			}
 		}
-
 		private void SetLocalizedStatus(string key, params object[] arguments)
 		{
 			_statusLocalizationKey = key;
@@ -2208,6 +3469,19 @@ namespace Sekai.CustomMusicScoreManager
 			_statusText.text = _statusLocalizationArguments == null || _statusLocalizationArguments.Length == 0
 				? LocalizationManager.Get(_statusLocalizationKey)
 				: LocalizationManager.Format(_statusLocalizationKey, _statusLocalizationArguments);
+		}
+
+		private void ShowSuccessDialog(string message)
+		{
+			Common1ButtonDialog dialog = ScreenManager.Instance?.Show1ButtonDialog<Common1ButtonDialog>(
+				DialogType.Common1ButtonDialog,
+				null,
+				"WORD_DECIDE",
+				null,
+				DisplayLayerType.Layer_Dialog,
+				DialogSize.Manual,
+				true);
+			dialog?.SetMessageBodyText(message);
 		}
 
 		private static TMP_InputField CreateInputField(Transform parent, string label, string placeholder)
@@ -2339,6 +3613,46 @@ namespace Sekai.CustomMusicScoreManager
 			input.placeholder = placeholderText;
 			input.targetGraphic = fieldObject.GetComponent<Image>();
 			return input;
+		}
+
+		private static Button CreateButtonField(Transform parent, string label, string buttonText, UnityEngine.Events.UnityAction onClick)
+		{
+			GameObject root = new GameObject(label + "ButtonField", typeof(RectTransform));
+			root.transform.SetParent(parent, false);
+			LayoutElement layoutElement = root.AddComponent<LayoutElement>();
+			layoutElement.preferredHeight = 116f;
+			layoutElement.minHeight = 116f;
+			VerticalLayoutGroup vertical = root.AddComponent<VerticalLayoutGroup>();
+			vertical.spacing = 12f;
+			vertical.childControlWidth = true;
+			vertical.childControlHeight = false;
+
+			TextMeshProUGUI labelText = CreateText("Label", root.transform, label, 23, FontStyles.Bold, TextAlignmentOptions.Left);
+			labelText.rectTransform.sizeDelta = new Vector2(0f, 30f);
+
+			GameObject buttonObject = new GameObject("Button", typeof(RectTransform), typeof(Image), typeof(Button));
+			buttonObject.transform.SetParent(root.transform, false);
+			RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+			buttonRect.sizeDelta = new Vector2(0f, 70f);
+
+			Image image = buttonObject.GetComponent<Image>();
+			image.color = new Color32(62, 78, 92, 255);
+			Button button = buttonObject.GetComponent<Button>();
+			button.targetGraphic = image;
+			button.transition = Selectable.Transition.ColorTint;
+			ColorBlock colors = button.colors;
+			colors.normalColor = Color.white;
+			colors.highlightedColor = new Color32(220, 238, 255, 255);
+			colors.pressedColor = new Color32(180, 213, 242, 255);
+			colors.disabledColor = new Color32(120, 126, 132, 120);
+			button.colors = colors;
+			button.onClick.AddListener(onClick);
+
+			TextMeshProUGUI buttonLabel = CreateText("Label", buttonRect, buttonText, 26, FontStyles.Bold, TextAlignmentOptions.Center);
+			buttonLabel.textWrappingMode = TextWrappingModes.NoWrap;
+			buttonLabel.overflowMode = TextOverflowModes.Ellipsis;
+			Stretch(buttonLabel.rectTransform);
+			return button;
 		}
 
 		private static Button CreateFormButton(Transform parent, string name, string label, UnityEngine.Events.UnityAction onClick)

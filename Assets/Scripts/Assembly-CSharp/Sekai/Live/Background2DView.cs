@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using Sekai.Core.Live;
 using Sekai.MusicScoreMaker.Common;
 using UnityEngine;
@@ -12,7 +12,7 @@ namespace Sekai.Live
 		private const string DefaultBackgroundBundleName = "live/2dmode/background/default";
 		private const string DefaultBackgroundAssetName = "default";
 		private const float BaseAspect = 16f / 9f;
-		private const string MovieQuadName = "OpenSekaiMovieQuad";
+		private const string MovieQuadName = "OjskCommunityMovieQuad";
 		private const int DefaultMovieTextureWidth = 1920;
 		private const int DefaultMovieTextureHeight = 1080;
 
@@ -379,7 +379,7 @@ namespace Sekai.Live
 				Destroy(movieTexture);
 			}
 			movieTexture = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);
-			movieTexture.name = "OpenSekai 2DMV Texture";
+			movieTexture.name = "OjskCommunity 2DMV Texture";
 			movieTexture.Create();
 			return movieTexture;
 		}
@@ -411,7 +411,7 @@ namespace Sekai.Live
 		private static Mesh CreateMovieQuadMesh()
 		{
 			Mesh mesh = new Mesh();
-			mesh.name = "OpenSekai 2DMV Quad";
+			mesh.name = "OjskCommunity 2DMV Quad";
 			mesh.vertices = new[]
 			{
 				new Vector3(-0.5f, -0.5f, 0f),
@@ -446,7 +446,7 @@ namespace Sekai.Live
 			Material material = shader != null
 				? new Material(shader)
 				: new Material(movieRenderer.sharedMaterial);
-			material.name = "OpenSekai 2DMV Material";
+			material.name = "OjskCommunity 2DMV Material";
 			if (material.HasProperty("_Cull"))
 			{
 				material.SetFloat("_Cull", (float)CullMode.Off);
@@ -590,7 +590,7 @@ namespace Sekai.Live
 					return null;
 				}
 
-				string cacheDirectory = Path.Combine(Application.temporaryCachePath, "OpenSekai2DMV");
+				string cacheDirectory = Path.Combine(Application.temporaryCachePath, "OjskCommunity2DMV");
 				Directory.CreateDirectory(cacheDirectory);
 				string cachePath = Path.Combine(cacheDirectory, CreateAsciiMovieCacheFileName(sourceInfo));
 				FileInfo cacheInfo = new FileInfo(cachePath);

@@ -63,6 +63,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private static readonly Color32 ColorBackground;
 
+		private static readonly Color32 ColorWaveform;
+
 		private static readonly Color ViewportFrameColor;
 
 		private const float VIEWPORT_FRAME_MARGIN = 6f;
@@ -70,6 +72,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private Texture2D _minimapTexture;
 
 		private Color32[] _pixelBuffer;
+
+		private float[] _audioSamples;
+
+		private long _audioTotalTicks;
+
+		private long _audioFillerTicks;
 
 		private Material _materialInstance;
 
@@ -121,6 +129,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			MusicScoreMakerEventDispatcher.Instance.Register<InvalidateMaxFocusableTicksCacheEvent>(OnMaxTicksCacheInvalidated);
 			_isDirty = true;
 			_isSetup = true;
+		}
+
+		public void SetAudioSamples(float[] samples, long totalTicks, long fillerTicks)
+		{
+			_audioSamples = samples;
+			_audioTotalTicks = totalTicks;
+			_audioFillerTicks = fillerTicks;
+			_isDirty = true;
 		}
 
 		public void Dispose()
@@ -263,22 +279,32 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 			_lastRebuildStartTicks = _displayStartTicks;
 			ClearPixelBuffer();
-			DrawBarLines(data.MusicScoreEventDataList, textureHeight);
-			Dictionary<int, MusicScoreNoteBase> noteIdCache = data.GetNoteIdCacheOrRebuild();
-			if (data.NoteList != null)
+			int previewMode = LiveConfig.ScoreMakerPreviewModeIndex;
+			bool drawWaveform = previewMode == LiveConfig.ScoreMakerPreviewModeWaveform || previewMode == LiveConfig.ScoreMakerPreviewModeOverlay;
+			bool drawNotes = previewMode == LiveConfig.ScoreMakerPreviewModeThumbnail || previewMode == LiveConfig.ScoreMakerPreviewModeOverlay;
+			if (drawWaveform && _audioSamples != null)
 			{
-				for (int i = 0; i < data.NoteList.Count; i++)
+				DrawWaveform(textureHeight);
+			}
+			if (drawNotes)
+			{
+				DrawBarLines(data.MusicScoreEventDataList, textureHeight);
+				Dictionary<int, MusicScoreNoteBase> noteIdCache = data.GetNoteIdCacheOrRebuild();
+				if (data.NoteList != null)
 				{
-					MusicScoreNoteBase note = data.NoteList[i];
-					if (note == null)
+					for (int i = 0; i < data.NoteList.Count; i++)
 					{
-						continue;
+						MusicScoreNoteBase note = data.NoteList[i];
+						if (note == null)
+						{
+							continue;
+						}
+						if (note.nextConnectionId != -1)
+						{
+							DrawLongNoteBand(note, noteIdCache, textureHeight);
+						}
+						DrawNote(note, textureHeight);
 					}
-					if (note.nextConnectionId != -1)
-					{
-						DrawLongNoteBand(note, noteIdCache, textureHeight);
-					}
-					DrawNote(note, textureHeight);
 				}
 			}
 			_minimapTexture.SetPixels32(_pixelBuffer);
@@ -452,6 +478,45 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 					}
 				}
 				ticks += barTicks;
+			}
+		}
+
+		private void DrawWaveform(int textureHeight)
+		{
+			if (_audioSamples == null || textureHeight <= 0 || _audioTotalTicks <= 0)
+			{
+				return;
+			}
+			int sampleCount = _audioSamples.Length;
+			if (sampleCount == 0)
+			{
+				return;
+			}
+			for (int y = 0; y < textureHeight; y++)
+			{
+				long tickAtY = PixelYToTicks(y, textureHeight);
+				float normalizedPosition = (float)(tickAtY + _audioFillerTicks) / _audioTotalTicks;
+				normalizedPosition = Mathf.Clamp01(normalizedPosition);
+				int sampleIndex = (int)(normalizedPosition * sampleCount);
+				sampleIndex = Mathf.Clamp(sampleIndex, 0, sampleCount - 1);
+				float amplitude = _audioSamples[sampleIndex];
+				int waveformHeight = Mathf.CeilToInt(amplitude * (TEXTURE_WIDTH / 2));
+				waveformHeight = Mathf.Clamp(waveformHeight, 1, TEXTURE_WIDTH / 2);
+				int centerY = TEXTURE_WIDTH / 2;
+				int yIndex = y * TEXTURE_WIDTH;
+				for (int w = 0; w < waveformHeight; w++)
+				{
+					int leftX = centerY - w - 1;
+					int rightX = centerY + w;
+					if (leftX >= 0)
+					{
+						_pixelBuffer[yIndex + leftX] = ColorWaveform;
+					}
+					if (rightX < TEXTURE_WIDTH)
+					{
+						_pixelBuffer[yIndex + rightX] = ColorWaveform;
+					}
+				}
 			}
 		}
 
@@ -668,6 +733,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			ColorLongBandCritical = new Color32(255, 208, 76, 180);
 			ColorBarLine = new Color32(255, 255, 255, 90);
 			ColorBackground = new Color32(0, 0, 0, 0);
+			ColorWaveform = new Color32(0, 255, 0, 255);
 			ViewportFrameColor = new Color(1f, 1f, 1f, 0.85f);
 			IsMusicPlayingEventCache = new IsMusicPlayingEvent();
 			GetMusicScoreMakerDataEventCache = new GetMusicScoreMakerDataEvent();

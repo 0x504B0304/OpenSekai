@@ -51,7 +51,10 @@ namespace Sekai
 		public static void SaveToStorage(ApplicationLocalSettings settings)
 		{
 			cachedStorage = settings ?? new ApplicationLocalSettings();
-			cachedStorage.EnsureDefaults();
+			if (cachedStorage.LiveVolume == null)
+			{
+				cachedStorage.LiveVolume = new VolumeSettings();
+			}
 			string path = StoragePath;
 			try
 			{

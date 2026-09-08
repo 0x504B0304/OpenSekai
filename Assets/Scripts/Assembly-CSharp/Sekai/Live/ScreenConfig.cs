@@ -76,7 +76,7 @@ namespace Sekai.Live
 				return;
 			}
 
-			// OpenSekai: desktop players can resize the window before live; remember that size.
+			// OjskCommunity: desktop players can resize the window before live; remember that size.
 			standaloneRestoreSize = new ScreenSize(Screen.width, Screen.height);
 		}
 

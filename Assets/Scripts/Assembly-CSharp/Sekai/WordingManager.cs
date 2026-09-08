@@ -54,7 +54,7 @@ namespace Sekai
 		public static void AddMasterWording()
 		{
 			// Original app reads MasterDataManager.Instance.GetWordings() from CachedMaserDataAll.
-			// OpenSekai does not load full master data yet, so this temporary restoration path
+			// OjskCommunity does not load full master data yet, so this temporary restoration path
 			// reads the pre-extracted master wording table from a local Resources txt file.
 			LoadWordingText(MASTER_WORDING_RESOURCE_PATH, overwrite: true, logMissing: false);
 		}

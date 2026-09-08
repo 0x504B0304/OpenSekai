@@ -87,7 +87,7 @@ Shader "Sekai/Particles/Additive+AlphaBlend"
                 // AssetRipper preserved the original shader's TEXCOORD0.z alpha gate,
                 // but Unity's restored particle vertex streams do not provide that
                 // channel consistently. Keeping the gate makes countdown rings fully
-                // transparent in OpenSekai.
+                // transparent in OjskCommunity.
                 color.rgb *= color.a;
                 return color;
             }

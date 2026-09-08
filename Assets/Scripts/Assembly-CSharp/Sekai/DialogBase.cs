@@ -64,7 +64,7 @@ namespace Sekai
 		public DialogState CurrentState => currentState;
 		public bool IsChain { get; set; }
 
-		// OpenSekai uses this property as the ScreenManager close hook. The original
+		// OjskCommunity uses this property as the ScreenManager close hook. The original
 		// class has close/open events plus virtual callbacks; this keeps that bridge.
 		public Action OnClosed { get; set; }
 		public event Action OnClose;

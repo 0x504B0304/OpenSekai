@@ -89,7 +89,7 @@ namespace Sekai
 		public void SetupOnDemandFontAsset()
 		{
 			// The original swaps in AssetBundle-loaded on-demand fonts here.
-			// OpenSekai currently ships the builtin font atlases locally, so this
+			// OjskCommunity currently ships the builtin font atlases locally, so this
 			// keeps the same fallback shape until the on-demand font bundle path is restored.
 			SetupBuiltinFontAsset();
 		}

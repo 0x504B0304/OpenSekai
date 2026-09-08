@@ -378,7 +378,7 @@ namespace AcbDecoder
                     if (pos + tlvSize > size)
                         break;
 
-                    // OpenSekai: CRI cue command 0x57 stores the sequence/track volume
+                    // OjskCommunity: CRI cue command 0x57 stores the sequence/track volume
                     // as a percentage. custom02 relies on this for layered tap sounds.
                     if (code == 0x57 && tlvSize >= 2)
                     {
