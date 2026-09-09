@@ -17,7 +17,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 {
 	public sealed class ArtToolsRuntimePanel : MonoBehaviour
 	{
-		private const byte PanelBackgroundAlpha = 190;
+		private const byte PanelBackgroundAlpha = 255;
 
 		private const byte SectionBackgroundAlpha = 205;
 
@@ -103,7 +103,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			layout.childForceExpandHeight = false;
 
 			GameObject header = CreateRow(_panel.transform, 50);
+			header.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
 			_title = CreateLabel(header.transform, "art.text", 30, TextAlignmentOptions.MidlineLeft);
+			_title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
 			CreateCommandButton(header.transform, "×", Close, 52);
 			Transform body = CreateScrollableBody(_panel.transform);
 			_textControls = CreateContainer(body);
@@ -720,7 +722,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			GameObject result = CreateRect("Container", parent, new Color32(34, 40, 47, SectionBackgroundAlpha));
 			VerticalLayoutGroup layout = result.AddComponent<VerticalLayoutGroup>();
-			layout.padding = new RectOffset(8, 8, 8, 8); layout.spacing = 6; layout.childControlHeight = true; layout.childForceExpandHeight = false;
+			layout.padding = new RectOffset(8, 8, 8, 8); layout.spacing = 10; layout.childControlHeight = true; layout.childForceExpandHeight = false;
 			return result;
 		}
 
@@ -732,7 +734,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			rowLayout.preferredHeight = height;
 			rowLayout.flexibleHeight = 0;
 			HorizontalLayoutGroup layout = row.AddComponent<HorizontalLayoutGroup>();
-			layout.spacing = 6; layout.childControlWidth = true; layout.childForceExpandWidth = true; layout.childControlHeight = true;
+			layout.spacing = 10; layout.childControlWidth = true; layout.childForceExpandWidth = true; layout.childControlHeight = true;
 			return row;
 		}
 

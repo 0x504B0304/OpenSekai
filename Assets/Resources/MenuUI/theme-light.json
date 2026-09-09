@@ -1,0 +1,5 @@
+{
+  "background":"#D5D5E5", "panel":"#EBEBF2", "raised":"#FFFFFF",
+  "border":"#AAA9BE", "accent":"#77EEDD", "text":"#444466",
+  "muted":"#77778F", "danger":"#D92D6F", "selected":"#C3F9F0"
+}

@@ -16,10 +16,11 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using CustomMusicScoreManager.Helpers;
+using Sekai.MenuUI;
 
 namespace Sekai.CustomMusicScoreManager
 {
-	public sealed class ScreenLayerCustomMusicScoreManager : ScreenLayer
+	public sealed partial class ScreenLayerCustomMusicScoreManager : ScreenLayer
 	{
 		private const string BaseFontEbPath = "font/FOT-RodinNTLGPro-EB SDF_Base";
 
@@ -237,9 +238,8 @@ namespace Sekai.CustomMusicScoreManager
 
 		private void LateUpdate()
 		{
-			UpdateActionButtonLayout();
 			UpdateManifestFieldLayout();
-			UpdateDetailHeaderLayout();
+            UpdateMenuLayout();
 		}
 
 		protected override void OnExited()
@@ -254,9 +254,9 @@ namespace Sekai.CustomMusicScoreManager
 			Stretch(root);
 
 			Image background = gameObject.GetComponent<Image>() ?? gameObject.AddComponent<Image>();
-			background.color = new Color32(21, 25, 31, 255);
+			background.color = (Color32)MenuTheme.Background;
 
-			RectTransform topBar = CreatePanel("TopBar", root, new Color32(31, 37, 45, 255));
+			RectTransform topBar = CreatePanel("TopBar", root, (Color32)MenuTheme.Panel);
 			SetStretchTop(topBar, 0f, 0f, 0f, 108f);
 
 			TextMeshProUGUI title = CreateText("Title", topBar, $"Ojsk Community {Application.version}", 40, FontStyles.Bold, TextAlignmentOptions.Left);
@@ -277,7 +277,7 @@ namespace Sekai.CustomMusicScoreManager
 			RectTransform body = CreateRect("Body", root);
 			SetStretchOffsets(body, 28f, 28f, 28f, 136f);
 
-			RectTransform listPanel = CreatePanel("ListPanel", body, new Color32(26, 31, 38, 255));
+			RectTransform listPanel = CreatePanel("ListPanel", body, (Color32)MenuTheme.Panel);
 			SetAnchor(listPanel, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(28f, 0f), new Vector2(620f, 0f));
 
 			RectTransform listHeader = CreateRect("ListHeader", listPanel);
@@ -291,7 +291,7 @@ namespace Sekai.CustomMusicScoreManager
 			_emptyText = CreateText("EmptyText", listPanel, "暂无本地谱面", 24, FontStyles.Normal, TextAlignmentOptions.Center);
 			SetStretchOffsets(_emptyText.rectTransform, 28f, 100f, 28f, 100f);
 
-			RectTransform detailPanel = CreatePanel("DetailPanel", body, new Color32(28, 34, 42, 255));
+			RectTransform detailPanel = CreatePanel("DetailPanel", body, (Color32)MenuTheme.Panel);
 			_detailPanel = detailPanel;
 			SetStretchOffsets(detailPanel, 688f, 0f, 0f, 0f);
 
@@ -308,7 +308,7 @@ namespace Sekai.CustomMusicScoreManager
 			_detailStatus = CreateText("DetailStatus", detailPanel, string.Empty, 22, FontStyles.Bold, TextAlignmentOptions.Left);
 			SetStretchTop(_detailStatus.rectTransform, 252f, 184f, 30f, 38f);
 
-			_bestResultPanel = CreatePanel("BestResult", detailPanel, new Color32(22, 27, 34, 255));
+			_bestResultPanel = CreatePanel("BestResult", detailPanel, (Color32)MenuTheme.Background);
 			SetAnchor(_bestResultPanel, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-BestResultRight, -BestResultTop), new Vector2(BestResultPreferredWidth, BestResultHeight));
 			VerticalLayoutGroup bestResultLayout = _bestResultPanel.gameObject.AddComponent<VerticalLayoutGroup>();
 			bestResultLayout.padding = new RectOffset(18, 18, 14, 14);
@@ -416,6 +416,7 @@ namespace Sekai.CustomMusicScoreManager
 			statusLayout.preferredHeight = 58f;
 
 			BuildSettingsOverlay(root);
+            BuildMenuDesign(root);
 			UpdateSelection(null);
 		}
 
@@ -425,7 +426,7 @@ namespace Sekai.CustomMusicScoreManager
 			Stretch(_settingsOverlay);
 			_settingsOverlay.gameObject.SetActive(false);
 
-			RectTransform dialog = CreatePanel("SettingsDialog", _settingsOverlay, new Color32(31, 37, 45, 255));
+			RectTransform dialog = CreatePanel("SettingsDialog", _settingsOverlay, (Color32)MenuTheme.Panel);
 			SetAnchor(dialog, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(760f, 960f));
 
 			VerticalLayoutGroup dialogLayout = dialog.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -613,15 +614,16 @@ namespace Sekai.CustomMusicScoreManager
 				}
 				UnityEngine.Debug.Log("Button text: " + buttonText);
 
-				button.onClick.RemoveAllListeners();
 				if (buttonName == "CancelButton" || buttonText == "取消" || buttonText == "Cancel")
 				{
-					button.onClick.AddListener(() => screenLayer.CloseSettingsAndReturnToEditor());
+					button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() => screenLayer.CloseSettingsAndReturnToEditor());
 					UnityEngine.Debug.Log("Cancel button listener added");
 				}
 				else if (buttonName == "SaveButton" || buttonText == "保存" || buttonText == "Save")
 				{
-					button.onClick.AddListener(() => screenLayer.SaveSettingsAndReturnToEditor());
+					button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() => screenLayer.SaveSettingsAndReturnToEditor());
 					UnityEngine.Debug.Log("Save button listener added");
 				}
 			}
@@ -1516,7 +1518,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.backup"));
+				true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.backup"));
 		}
 
 		private void OnBackupConfirmed()
@@ -1543,7 +1545,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					false);
+					false).WithMenuTheme();
 				_pleaseWaitDialog?.SetMessageBodyText(progress);
 			}
 		}
@@ -1563,7 +1565,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					true)?.SetMessageBodyText(LocalizationManager.Format("manager.confirm.backup_share", backupPath));
+					true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Format("manager.confirm.backup_share", backupPath));
 			}
 			else if (result == "cancelled")
 			{
@@ -1578,7 +1580,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					true)?.SetMessageBodyText(LocalizationManager.Format("manager.dialog.backup_failed", result));
+					true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Format("manager.dialog.backup_failed", result));
 			}
 		}
 
@@ -1731,7 +1733,7 @@ namespace Sekai.CustomMusicScoreManager
 				() => OnRestoreAllSelected(),
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true);
+				true).WithMenuTheme();
 		}
 
 		private void OnRestoreAllSelected()
@@ -1746,7 +1748,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true);
+				true).WithMenuTheme();
 		}
 
 		private string _restoreBackupPath;
@@ -1772,7 +1774,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					false);
+					false).WithMenuTheme();
 				_pleaseWaitDialog?.SetMessageBodyText(progress);
 			}
 		}
@@ -1790,7 +1792,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_complete"));
+					true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_complete"));
 			}
 			else if (result == "cancelled")
 			{
@@ -1805,7 +1807,7 @@ namespace Sekai.CustomMusicScoreManager
 					null,
 					DisplayLayerType.Layer_Dialog,
 					DialogSize.Manual,
-					true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_failed"));
+					true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.restore_failed"));
 			}
 		}
 
@@ -2026,15 +2028,16 @@ namespace Sekai.CustomMusicScoreManager
 			layout.minHeight = 116f;
 
 			Image image = root.GetComponent<Image>();
-			image.color = new Color32(39, 46, 55, 255);
+			MenuRoundedImage.Set(image,MenuControls.Rounded);MenuThemeBinding.Bind(image,MenuColor.Raised);
 			Button button = root.GetComponent<Button>();
 			button.targetGraphic = image;
 			button.onClick.AddListener(() => UpdateSelection(item));
 
-			TextMeshProUGUI title = CreateText("Title", rect, item.Entry.Manifest.scoreTitle, 26, FontStyles.Bold, TextAlignmentOptions.Left);
+			TextMeshProUGUI title = CreateText("Title", rect, item.Entry.Manifest.title, 26, FontStyles.Bold, TextAlignmentOptions.Left);
+			SetMenuLiteral(title,item.Entry.Manifest.title);
 			SetAnchor(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(22f, -14f), new Vector2(-44f, 36f));
 
-			string metaText = item.Entry.Manifest.title;
+			string metaText = item.Entry.Manifest.scoreTitle;
 			if (!string.IsNullOrEmpty(item.Entry.Manifest.userName))
 			{
 				metaText += "  " + item.Entry.Manifest.userName;
@@ -2044,21 +2047,24 @@ namespace Sekai.CustomMusicScoreManager
 				metaText += "  " + item.Entry.Manifest.musicDifficultyType.ToUpperInvariant();
 			}
 			TextMeshProUGUI meta = CreateText("Meta", rect, metaText, 20, FontStyles.Normal, TextAlignmentOptions.Left);
+			SetMenuLiteral(meta,metaText);
 			SetAnchor(meta.rectTransform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 0f), new Vector2(22f, 16f), new Vector2(-210f, 30f));
 
 			TextMeshProUGUI status = CreateText("Status", rect, item.StatusText, 20, FontStyles.Bold, TextAlignmentOptions.Right);
 			SetAnchor(status.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-22f, 16f), new Vector2(178f, 30f));
-			status.color = item.HasAudio && item.HasScore ? new Color32(126, 221, 166, 255) : new Color32(255, 184, 100, 255);
+			MenuThemeBinding.Bind(status,item.HasAudio && item.HasScore ? MenuColor.Muted : MenuColor.Danger);
 
 			return new RowView(root, image, status, item);
 		}
 
 		private void UpdateSelection(CustomMusicScoreManagerItem item)
 		{
+            if(item!=null)_menuDetailVisible=true;
+            _menuLastSize=Vector2.zero;
 			_selected = item;
 			foreach (RowView row in _rows)
 			{
-				row.Background.color = row.Item == item ? new Color32(52, 91, 112, 255) : new Color32(39, 46, 55, 255);
+				MenuThemeBinding.Bind(row.Background,row.Item==item?MenuColor.Selected:MenuColor.Raised);
 			}
 
 			bool hasSelection = item != null;
@@ -2078,7 +2084,8 @@ namespace Sekai.CustomMusicScoreManager
 
 			if (!hasSelection)
 			{
-				_detailTitle.text = LocalizationManager.Get("manager.select_score");
+				var titleBinding=_detailTitle.GetComponent<LocalizedTextBinding>()??_detailTitle.gameObject.AddComponent<LocalizedTextBinding>();
+				titleBinding.Key="manager.select_score";
 				_detailMeta.text = string.Empty;
 				_detailStatus.text = string.Empty;
 				SetBestResultText(null);
@@ -2088,7 +2095,7 @@ namespace Sekai.CustomMusicScoreManager
 			}
 
 			CustomMusicScoreManifest manifest = item.Entry.Manifest;
-			_detailTitle.text = manifest.scoreTitle;
+			SetMenuLiteral(_detailTitle,manifest.title);
 			_detailMeta.text = LocalizationManager.Format(
 				"manager.detail.summary",
 				manifest.title,
@@ -2096,7 +2103,7 @@ namespace Sekai.CustomMusicScoreManager
 				item.Entry.RootDirectory,
 				item.LastWriteTime);
 			_detailStatus.text = item.StatusText;
-			_detailStatus.color = item.HasAudio && item.HasScore ? new Color32(126, 221, 166, 255) : new Color32(255, 184, 100, 255);
+			MenuThemeBinding.Bind(_detailStatus,item.HasAudio && item.HasScore ? MenuColor.Muted : MenuColor.Danger);
 			UpdateBestResult(manifest);
 			LoadJacket(item.Entry.JacketPath);
 			LoadForm(manifest);
@@ -2412,7 +2419,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true);
+				true).WithMenuTheme();
 			if (dialog != null)
 			{
 				dialog.SetMessageBodyText(LocalizationManager.Format("manager.confirm.delete", title));
@@ -2486,7 +2493,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.export_failed"));
+				true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.export_failed"));
 		}
 
 		private void AskShareAfterExport(string path)
@@ -2498,7 +2505,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true);
+				true).WithMenuTheme();
 			dialog?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.share_score"));
 		}
 
@@ -3022,7 +3029,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				allowCloseExternal: true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.calculate_duration"));
+				allowCloseExternal: true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.calculate_duration"));
 		}
 
 		private async UniTaskVoid CalculateDurationAsync()
@@ -3109,7 +3116,7 @@ namespace Sekai.CustomMusicScoreManager
 			null,  // onClickCancel
 			DisplayLayerType.Layer_Dialog,
 			DialogSize.Manual,
-			true)?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.generate_video"));
+			true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.confirm.generate_video"));
 	}
 
 	private void StartVideoGeneration()
@@ -3185,7 +3192,7 @@ namespace Sekai.CustomMusicScoreManager
 			},
 			DisplayLayerType.Layer_Dialog,
 			DialogSize.Manual,
-			true)?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.gallery_permission"));
+			true).WithMenuTheme()?.SetMessageBodyText(LocalizationManager.Get("manager.dialog.gallery_permission"));
 	}
 
 	/// <summary>
@@ -3556,7 +3563,7 @@ namespace Sekai.CustomMusicScoreManager
 				null,
 				DisplayLayerType.Layer_Dialog,
 				DialogSize.Manual,
-				true);
+				true).WithMenuTheme();
 			dialog?.SetMessageBodyText(message);
 		}
 
@@ -3587,7 +3594,7 @@ namespace Sekai.CustomMusicScoreManager
 			_difficultyFieldRect = fieldObject.GetComponent<RectTransform>();
 			_difficultyFieldRect.sizeDelta = new Vector2(0f, 70f);
 			Image fieldImage = fieldObject.GetComponent<Image>();
-			fieldImage.color = new Color32(22, 26, 32, 255);
+			fieldImage.color = (Color32)MenuTheme.Background;
 
 			Button button = fieldObject.GetComponent<Button>();
 			button.targetGraphic = fieldImage;
@@ -3608,7 +3615,8 @@ namespace Sekai.CustomMusicScoreManager
 			hint.raycastTarget = false;
 			SetAnchor(hint.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-14f, 0f), new Vector2(104f, 0f));
 			SetDifficultyDropdownValue("master");
-			return button;
+			MenuControls.Style(button,button.name=="EditButton"||button.name=="SaveButton"||button.name=="ImportButton"||button.name=="SaveManifestButton",button.name=="DeleteButton");
+            return button;
 		}
 
 		private void CycleDifficulty()
@@ -3642,7 +3650,7 @@ namespace Sekai.CustomMusicScoreManager
 			fieldObject.transform.SetParent(root.transform, false);
 			RectTransform fieldRect = fieldObject.GetComponent<RectTransform>();
 			fieldRect.sizeDelta = new Vector2(0f, 70f);
-			fieldObject.GetComponent<Image>().color = new Color32(22, 26, 32, 255);
+			fieldObject.GetComponent<Image>().color = (Color32)MenuTheme.Background;
 
 			RectTransform textArea = CreateRect("Text Area", fieldRect);
 			textArea.gameObject.AddComponent<RectMask2D>();
@@ -3665,7 +3673,7 @@ namespace Sekai.CustomMusicScoreManager
 				SetAnchor(actionRect, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-7f, 0f), new Vector2(110f, -14f));
 
 				Image actionImage = actionObject.GetComponent<Image>();
-				actionImage.color = new Color32(62, 78, 92, 255);
+				actionImage.color = (Color32)MenuTheme.Raised;
 				actionButton = actionObject.GetComponent<Button>();
 				actionButton.targetGraphic = actionImage;
 				actionButton.transition = Selectable.Transition.ColorTint;
@@ -3688,6 +3696,7 @@ namespace Sekai.CustomMusicScoreManager
 			input.textComponent = text;
 			input.placeholder = placeholderText;
 			input.targetGraphic = fieldObject.GetComponent<Image>();
+            MenuRoundedImage.Set(input.image,MenuControls.Rounded);MenuThemeBinding.Bind(input.image,MenuColor.Raised);
 			return input;
 		}
 
@@ -3712,7 +3721,7 @@ namespace Sekai.CustomMusicScoreManager
 			buttonRect.sizeDelta = new Vector2(0f, 70f);
 
 			Image image = buttonObject.GetComponent<Image>();
-			image.color = new Color32(62, 78, 92, 255);
+			image.color = (Color32)MenuTheme.Raised;
 			Button button = buttonObject.GetComponent<Button>();
 			button.targetGraphic = image;
 			button.transition = Selectable.Transition.ColorTint;
@@ -3728,7 +3737,8 @@ namespace Sekai.CustomMusicScoreManager
 			buttonLabel.textWrappingMode = TextWrappingModes.NoWrap;
 			buttonLabel.overflowMode = TextOverflowModes.Ellipsis;
 			Stretch(buttonLabel.rectTransform);
-			return button;
+			MenuControls.Style(button,button.name=="EditButton"||button.name=="SaveButton"||button.name=="ImportButton"||button.name=="SaveManifestButton",button.name=="DeleteButton");
+            return button;
 		}
 
 		private static Button CreateFormButton(Transform parent, string name, string label, UnityEngine.Events.UnityAction onClick)
@@ -3745,7 +3755,7 @@ namespace Sekai.CustomMusicScoreManager
 			SetStretchOffsets(buttonRect, 0f, 10f, 0f, 10f);
 
 			Image image = buttonObject.GetComponent<Image>();
-			image.color = new Color32(54, 67, 80, 255);
+			image.color = (Color32)MenuTheme.Raised;
 			Button button = buttonObject.GetComponent<Button>();
 			button.targetGraphic = image;
 			button.transition = Selectable.Transition.ColorTint;
@@ -3761,7 +3771,8 @@ namespace Sekai.CustomMusicScoreManager
 			text.textWrappingMode = TextWrappingModes.NoWrap;
 			text.overflowMode = TextOverflowModes.Ellipsis;
 			Stretch(text.rectTransform);
-			return button;
+			MenuControls.Style(button,button.name=="EditButton"||button.name=="SaveButton"||button.name=="ImportButton"||button.name=="SaveManifestButton",button.name=="DeleteButton");
+            return button;
 		}
 
 		private static Button CreateButton(string name, Transform parent, string label, UnityEngine.Events.UnityAction onClick, float width, float height, Color32? color = null)
@@ -3775,7 +3786,7 @@ namespace Sekai.CustomMusicScoreManager
 			layout.preferredHeight = height;
 
 			Image image = root.GetComponent<Image>();
-			image.color = color ?? new Color32(54, 67, 80, 255);
+			image.color = color ?? (Color32)MenuTheme.Raised;
 			Button button = root.GetComponent<Button>();
 			button.targetGraphic = image;
 			button.transition = Selectable.Transition.ColorTint;
@@ -3791,7 +3802,8 @@ namespace Sekai.CustomMusicScoreManager
 			text.textWrappingMode = TextWrappingModes.NoWrap;
 			text.overflowMode = TextOverflowModes.Ellipsis;
 			Stretch(text.rectTransform);
-			return button;
+			MenuControls.Style(button,button.name=="EditButton"||button.name=="SaveButton"||button.name=="ImportButton"||button.name=="SaveManifestButton",button.name=="DeleteButton");
+            return button;
 		}
 
 		private static ScrollRect CreateHorizontalScrollRect(string name, Transform parent, out RectTransform content)
@@ -3868,7 +3880,7 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			GameObject root = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(ScrollRect));
 			root.transform.SetParent(parent, false);
-			root.GetComponent<Image>().color = new Color32(24, 29, 36, 255);
+			root.GetComponent<Image>().color = (Color32)MenuTheme.Background;
 			ScrollRect scrollRect = root.GetComponent<ScrollRect>();
 			scrollRect.scrollSensitivity = 48f;
 
@@ -3903,7 +3915,9 @@ namespace Sekai.CustomMusicScoreManager
 			go.transform.SetParent(parent, false);
 			Image image = go.GetComponent<Image>();
 			image.color = color;
-			return image;
+            if(name!="Jacket" && name!="Viewport"){MenuRoundedImage.Set(image,MenuControls.Rounded);}
+			MenuThemeBinding.Capture(image.transform);
+            return image;
 		}
 
 		private static TextMeshProUGUI CreateText(string name, Transform parent, string text, float fontSize, FontStyles style, TextAlignmentOptions alignment)
@@ -3920,10 +3934,11 @@ namespace Sekai.CustomMusicScoreManager
 			tmp.fontSize = fontSize;
 			tmp.fontStyle = style;
 			tmp.alignment = alignment;
-			tmp.color = new Color32(238, 243, 247, 255);
+			tmp.color = (Color32)MenuTheme.Text;
 			tmp.textWrappingMode = TextWrappingModes.NoWrap;
 			tmp.overflowMode = TextOverflowModes.Ellipsis;
-			RuntimeLocalizationBootstrap.TryBind(tmp);
+			MenuThemeBinding.Bind(tmp,MenuColor.Text);
+            RuntimeLocalizationBootstrap.TryBind(tmp);
 			return tmp;
 		}
 

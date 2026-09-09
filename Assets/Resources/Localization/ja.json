@@ -258,5 +258,21 @@
   "editor.options.clipboard.limit": "クリップボード履歴の最大数",
   "editor.options.settings.reset": "設定データをリセット",
   "editor.options.clipboard.clear": "クリップボード履歴を削除",
-  "editor.range_select": "範囲選択"
+  "editor.range_select": "範囲選択",
+  "menuui.library": "OpenSekai  /  楽曲ライブラリ",
+  "menuui.back": "‹ 楽曲",
+  "menuui.more": "その他 ···",
+  "menuui.basic": "基本情報",
+  "menuui.media": "メディア",
+  "menuui.chart": "譜面設定",
+  "menuui.sound": "サウンド",
+  "menuui.play": "ライブ",
+  "menuui.display": "表示",
+  "menuui.editor": "譜面制作",
+  "menuui.data": "言語・データ",
+  "menuui.light": "ライト",
+  "menuui.dark": "ダーク",
+  "menuui.theme": "メニューテーマ（即時反映）",
+  "editor.audio_assist": "採音補助",
+  "editor.minimap": "ミニマップ"
 }

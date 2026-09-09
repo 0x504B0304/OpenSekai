@@ -1,0 +1,5 @@
+numpy>=1.24,<3
+soundfile>=0.12,<1
+demucs==4.0.1
+pykakasi==2.3.0
+pypinyin==0.55.0

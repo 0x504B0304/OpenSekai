@@ -175,6 +175,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private ArtToolsRuntimePanel _artToolsRuntimePanel;
 
+		private AudioAssist.AudioAssistController _audioAssistController;
+
 		private SubWindowSlideAnimationController[] _subWindowSlideAnimationControllers;
 
 		[SerializeField]
@@ -184,6 +186,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private ZoomScaleInputView _zoomScaleInputView;
 
 		private Vector2 _originalSize;
+		private float _audioAssistWidth;
+		private float _audioAssistLeftExpansion;
+		private Vector2? _audioAssistBasePosition;
 
 		public RectTransform NotesViewRectTransform
 		{
@@ -356,8 +361,48 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				_originalSize = new Vector2(rect.width, rect.height);
 			}
 
-			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _originalSize.x * MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal);
+			float baseWidth = _originalSize.x * MusicScoreMakerSettingsManager.ScoreDisplayScaleHorizontal;
+			float availableWidth = baseWidth + _audioAssistLeftExpansion;
+			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, _audioAssistWidth > 0 ? Math.Max(240, availableWidth - _audioAssistWidth) : availableWidth);
 			rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, _originalSize.y * MusicScoreMakerSettingsManager.ScoreDisplayScaleVertical);
+			if (_audioAssistBasePosition.HasValue) rectTransform.anchoredPosition = _audioAssistBasePosition.Value - new Vector2((_audioAssistWidth + _audioAssistLeftExpansion) * .5f, 0);
+		}
+
+		public void SetAudioAssistWidth(float width)
+		{
+			SetAudioAssistLayout(width, _audioAssistLeftExpansion);
+		}
+
+		public void SetAudioAssistLayout(float width, float leftExpansion)
+		{
+			if (RectTransform == null) return;
+			if (!_audioAssistBasePosition.HasValue) _audioAssistBasePosition = RectTransform.anchoredPosition;
+			_audioAssistWidth = Math.Max(0, width);
+			_audioAssistLeftExpansion = Math.Max(0, leftExpansion);
+			SetScoreDisplayScale();
+			if (MusicScoreMakerEventDispatcher.ExistsInstance) MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
+		}
+
+		// Called after restoring native geometry. Keep the screenshot's native lane
+		// width as the maximum, and fit it between the currently visible side panels.
+		public void FitEditorLanes(RectTransform canvasRect, float left, float right)
+		{
+			var preview = RectTransform;var notes = NotesViewRectTransform;
+			if (preview == null || notes == null || right <= left) return;
+			var corners = new Vector3[4];notes.GetWorldCorners(corners);
+			float oldLeft = canvasRect.InverseTransformPoint(corners[0]).x;
+			float oldRight = canvasRect.InverseTransformPoint(corners[3]).x;
+			float nativeWidth = oldRight - oldLeft;
+			float maximumLocalWidth = Mathf.Max(1, _originalSize.x + notes.rect.width - preview.rect.width);
+			float maximumWidth = canvasRect.InverseTransformVector(preview.TransformVector(new Vector3(maximumLocalWidth, 0, 0))).x;
+			float width = Mathf.Min(nativeWidth, maximumWidth, right - left);
+			float center = Mathf.Clamp(canvasRect.rect.center.x, left + width * .5f, right - width * .5f);
+			float localDelta = preview.InverseTransformVector(canvasRect.TransformVector(new Vector3(width - nativeWidth, 0, 0))).x;
+			preview.SetSizeWithCurrentAnchors(UnityEngine.RectTransform.Axis.Horizontal, preview.rect.width + localDelta);
+			notes.GetWorldCorners(corners);
+			float currentCenter = (canvasRect.InverseTransformPoint(corners[0]).x + canvasRect.InverseTransformPoint(corners[3]).x) * .5f;
+			preview.position += canvasRect.TransformVector(new Vector3(center - currentCenter, 0, 0));
+			if (MusicScoreMakerEventDispatcher.ExistsInstance) MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
 		}
 
 		private void SetupToolWindow()
@@ -457,6 +502,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void Dispose()
 		{
+			if (_audioAssistController != null) { _audioAssistController.Shutdown(); _audioAssistController = null; }
 			RemoveEvents();
 			if (_backButton != null)
 			{
@@ -521,6 +567,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			Transform parent = _toolWindowObject != null ? _toolWindowObject.transform : transform;
 			ArtToolsRuntimePanel.Attach(parent, presenter);
 			_artToolsRuntimePanel = parent.GetComponent<ArtToolsRuntimePanel>();
+		}
+
+		public void SetupAudioAssist(MusicScoreMakerPresenter presenter)
+		{
+			if (_audioAssistController == null) _audioAssistController = gameObject.AddComponent<AudioAssist.AudioAssistController>();
+			_audioAssistController.Setup(presenter, this, _toolWindowObject != null ? _toolWindowObject.transform : null);
 		}
 
 		public void CloseArtToolsPanel()

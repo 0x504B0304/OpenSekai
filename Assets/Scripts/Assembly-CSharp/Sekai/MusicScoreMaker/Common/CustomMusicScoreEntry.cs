@@ -33,6 +33,8 @@ namespace Sekai.MusicScoreMaker.Common
 
 		public long AudioLengthMs { get; private set; }
 
+		public AudioClip RegisteredAudioClip => _audioClip;
+
 		public string ManifestPath => Path.Combine(RootDirectory, CustomMusicScoreStorage.ManifestFileName);
 
 		public string ScorePath => ResolveEntryPath(Manifest.scoreFileName);

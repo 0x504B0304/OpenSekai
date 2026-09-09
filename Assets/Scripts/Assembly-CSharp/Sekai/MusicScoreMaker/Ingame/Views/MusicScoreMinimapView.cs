@@ -23,19 +23,20 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		[SerializeField]
 		private Sprite _viewportFrameSprite;
 
-		private const int TEXTURE_WIDTH = 72;
+		private int _textureWidth = 144;
 
-		private const int LANE_PIXEL_WIDTH = 6;
+        private float LanePixelWidth => _textureWidth / 12f;
+        private int _noteHeightPixels = 3;
+        private readonly Vector3[] _resolutionCorners = new Vector3[4];
 
-		private const int PIXELS_PER_BEAT = 2;
+
 
 		private const int MAX_TEXTURE_HEIGHT = 4096;
 
 		private const int MIN_TEXTURE_HEIGHT = 64;
 
-		private const long TICKS_PER_PIXEL = 240L;
+		private const long TICKS_PER_PIXEL = 60L;
 
-		private const int NOTE_HEIGHT_PIXELS = 2;
 
 		private const int DISPLAY_RANGE_BARS = 30;
 
@@ -172,11 +173,12 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void UpdateView()
 		{
-			if (!_isSetup)
+			if (!_isSetup || !isActiveAndEnabled)
 			{
 				return;
 			}
 			UpdateDisplayRange();
+            UpdateResolution();
 			MusicScoreMakerData data = MusicScoreMakerEventDispatcher.Instance.PublishFirst<GetMusicScoreMakerDataEvent, MusicScoreMakerData>(GetMusicScoreMakerDataEventCache);
 			if (data != null)
 			{
@@ -273,7 +275,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				return false;
 			}
 			int textureHeight = CalculateTextureHeight(_displayRangeTicks);
-			if (_minimapTexture == null || _currentTextureHeight != textureHeight)
+			if (_minimapTexture == null || _currentTextureHeight != textureHeight || _minimapTexture.width != _textureWidth)
 			{
 				CreateOrResizeTexture(textureHeight);
 			}
@@ -312,10 +314,31 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			return true;
 		}
 
-		private static int CalculateTextureHeight(long rangeTicks)
-		{
-			return Mathf.Clamp((int)(rangeTicks / TICKS_PER_PIXEL), MIN_TEXTURE_HEIGHT, MAX_TEXTURE_HEIGHT);
-		}
+		private int CalculateTextureHeight(long rangeTicks)
+        {
+            var size = DisplayPixels();
+            return Mathf.Clamp(Mathf.Max((int)(rangeTicks / TICKS_PER_PIXEL), Mathf.CeilToInt(size.y * 1.25f)), MIN_TEXTURE_HEIGHT, MAX_TEXTURE_HEIGHT);
+        }
+        private Vector2 DisplayPixels()
+        {
+            if (_rawImage == null) return new Vector2(144, 768);
+            var canvas = _rawImage.canvas;
+            var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            _rawImage.rectTransform.GetWorldCorners(_resolutionCorners);
+            var bottom = RectTransformUtility.WorldToScreenPoint(camera, _resolutionCorners[0]);
+            var top = RectTransformUtility.WorldToScreenPoint(camera, _resolutionCorners[2]);
+            return new Vector2(Mathf.Abs(top.x-bottom.x), Mathf.Abs(top.y-bottom.y));
+        }
+        private void UpdateResolution()
+        {
+            var size = DisplayPixels();
+            int width = Mathf.Clamp(Mathf.CeilToInt(size.x / 12f) * 12, 144, 768);
+            int height = CalculateTextureHeight(_displayRangeTicks);
+            float scale = _rawImage.canvas != null ? _rawImage.canvas.scaleFactor : 1;
+            int noteHeight = Mathf.Max(1, Mathf.CeilToInt(height / Mathf.Max(1, size.y) * 2.5f * scale));
+            if (width != _textureWidth || height != _currentTextureHeight || noteHeight != _noteHeightPixels) _isDirty = true;
+            _textureWidth = width; _noteHeightPixels = noteHeight;
+        }
 
 		private void CreateOrResizeTexture(int textureHeight)
 		{
@@ -324,10 +347,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				Destroy(_minimapTexture);
 			}
 			_currentTextureHeight = textureHeight;
-			_minimapTexture = new Texture2D(TEXTURE_WIDTH, textureHeight, TextureFormat.RGBA32, false);
+			_minimapTexture = new Texture2D(_textureWidth, textureHeight, TextureFormat.RGBA32, false);
 			_minimapTexture.wrapMode = TextureWrapMode.Clamp;
-			_minimapTexture.filterMode = FilterMode.Point;
-			_pixelBuffer = new Color32[TEXTURE_WIDTH * textureHeight];
+			_minimapTexture.filterMode = FilterMode.Bilinear;
+			_pixelBuffer = new Color32[_textureWidth * textureHeight];
 			if (_rawImage != null)
 			{
 				_rawImage.texture = _minimapTexture;
@@ -356,18 +379,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				return;
 			}
-			int y = Mathf.Clamp(TicksToPixelY(note.ticks, textureHeight), 0, Mathf.Max(0, textureHeight - NOTE_HEIGHT_PIXELS));
-			int xStart = Mathf.Clamp(note.laneStart * LANE_PIXEL_WIDTH, 0, TEXTURE_WIDTH);
-			int xEnd = Mathf.Clamp(note.laneEnd * LANE_PIXEL_WIDTH + LANE_PIXEL_WIDTH, 0, TEXTURE_WIDTH);
+			int y = Mathf.Clamp(TicksToPixelY(note.ticks, textureHeight), 0, Mathf.Max(0, textureHeight - _noteHeightPixels));
+			int xStart = Mathf.Clamp(Mathf.FloorToInt(note.laneStart * LanePixelWidth), 0, _textureWidth);
+			int xEnd = Mathf.Clamp(Mathf.CeilToInt((note.laneEnd + 1) * LanePixelWidth), 0, _textureWidth);
 			Color32 color = GetNoteColor(note.category, note.type);
-			for (int dy = 0; dy < NOTE_HEIGHT_PIXELS; dy++)
+			for (int dy = 0; dy < _noteHeightPixels; dy++)
 			{
 				int py = y + dy;
 				if (py < 0 || py >= textureHeight)
 				{
 					continue;
 				}
-				int index = py * TEXTURE_WIDTH + xStart;
+				int index = py * _textureWidth + xStart;
 				for (int x = xStart; x < xEnd; x++)
 				{
 					_pixelBuffer[index++] = color;
@@ -398,11 +421,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				float rate = endTicks == startTicks ? 0f : (PixelYToTicks(y, textureHeight) - note.ticks) / (float)(next.ticks - note.ticks);
 				rate = Mathf.Clamp01(ApplyEasing(rate, note.noteLineType));
-				int laneStart = Mathf.RoundToInt(Mathf.Lerp(note.laneStart, next.laneStart, rate));
-				int laneEnd = Mathf.RoundToInt(Mathf.Lerp(note.laneEnd, next.laneEnd, rate));
-				int xStart = Mathf.Clamp(laneStart * LANE_PIXEL_WIDTH, 0, TEXTURE_WIDTH);
-				int xEnd = Mathf.Clamp(laneEnd * LANE_PIXEL_WIDTH + LANE_PIXEL_WIDTH, 0, TEXTURE_WIDTH);
-				int index = y * TEXTURE_WIDTH + xStart;
+				float laneStart = Mathf.Lerp(note.laneStart, next.laneStart, rate);
+				float laneEnd = Mathf.Lerp(note.laneEnd, next.laneEnd, rate);
+				int xStart = Mathf.Clamp(Mathf.FloorToInt(laneStart * LanePixelWidth), 0, _textureWidth);
+				int xEnd = Mathf.Clamp(Mathf.CeilToInt((laneEnd + 1) * LanePixelWidth), 0, _textureWidth);
+				int index = y * _textureWidth + xStart;
 				for (int x = xStart; x < xEnd; x++)
 				{
 					if (index >= 0 && index < _pixelBuffer.Length)
@@ -468,8 +491,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				int y = TicksToPixelY(ticks, textureHeight);
 				if (y >= 0 && y < textureHeight)
 				{
-					int index = y * TEXTURE_WIDTH;
-					for (int x = 0; x < TEXTURE_WIDTH; x++)
+					int index = y * _textureWidth;
+					for (int x = 0; x < _textureWidth; x++)
 					{
 						if (_pixelBuffer[index + x].a == 0)
 						{
@@ -500,10 +523,10 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 				int sampleIndex = (int)(normalizedPosition * sampleCount);
 				sampleIndex = Mathf.Clamp(sampleIndex, 0, sampleCount - 1);
 				float amplitude = _audioSamples[sampleIndex];
-				int waveformHeight = Mathf.CeilToInt(amplitude * (TEXTURE_WIDTH / 2));
-				waveformHeight = Mathf.Clamp(waveformHeight, 1, TEXTURE_WIDTH / 2);
-				int centerY = TEXTURE_WIDTH / 2;
-				int yIndex = y * TEXTURE_WIDTH;
+				int waveformHeight = Mathf.CeilToInt(amplitude * (_textureWidth / 2));
+				waveformHeight = Mathf.Clamp(waveformHeight, 1, _textureWidth / 2);
+				int centerY = _textureWidth / 2;
+				int yIndex = y * _textureWidth;
 				for (int w = 0; w < waveformHeight; w++)
 				{
 					int leftX = centerY - w - 1;
@@ -512,7 +535,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 					{
 						_pixelBuffer[yIndex + leftX] = ColorWaveform;
 					}
-					if (rightX < TEXTURE_WIDTH)
+					if (rightX < _textureWidth)
 					{
 						_pixelBuffer[yIndex + rightX] = ColorWaveform;
 					}
@@ -556,6 +579,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 						hash = hash * 31L + (int)note.category;
 						hash = hash * 31L + (int)note.type;
 						hash = hash * 31L + note.nextConnectionId;
+                        hash = hash * 31L + (int)note.noteLineType;
 					}
 				}
 				if (data.MusicScoreEventDataList != null)

@@ -27,7 +27,7 @@ using MusicScorePreviewPlayData = Sekai.MusicScoreMaker.OutGame.MusicScorePrevie
 
 namespace Sekai.MusicScoreMaker.Ingame.Presenters
 {
-	public class MusicScoreMakerPresenter
+	public partial class MusicScoreMakerPresenter
 	{
 		private struct ConnectedNoteTypeChangeInfo
 		{
@@ -1327,6 +1327,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			if (_view != null)
 			{
 				_view.SetUpdatePresenterAction(Update);
+				_view.SetupAudioAssist(this);
 			}
 			ShowAutoSaveDisabledWarningIfNeeded();
 			MusicScoreMakerRuleSlideTutorialUtility.TryShowTutorialSlideIfFirstTime("music_score_maker");
@@ -2279,6 +2280,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void PauseMusic()
 		{
+			AudioAssist?.Transport?.Pause();
+			_assistPlaybackActive = false;
+			AudioAssist?.ClearAuditionEnd();
 			StopLongNoteSe();
 			_musicUpdateCts?.Cancel();
 			_musicUpdateCts?.Dispose();
@@ -2298,6 +2302,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void OnPlayMusic(PlayMusicEvent evt)
 		{
+			if (AudioAssist != null && AudioAssist.BlocksPlayback)
+			{
+				if (_model != null) _model.IsMusicPlaying = false;
+				return;
+			}
 			if (_model != null)
 			{
 				_model.IsMusicPlaying = true;
@@ -2351,6 +2360,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				{
 					MusicScoreMakerEventDispatcher.Instance.Publish(new PauseMusicEvent());
 				}
+				return;
+			}
+			if (AudioAssist != null && AudioAssist.Ready)
+			{
+				SoundManager.Instance.StopIngame();
+				_musicUpdateCts?.Cancel();
+				_musicUpdateCts?.Dispose();
+				_musicUpdateCts = new CancellationTokenSource();
+				AudioAssist.Transport.Play(playbackStartTime);
+				_assistPlaybackActive = AudioAssist.Transport.Playing;
+				if (!AudioAssist.Transport.Playing) { _model.IsMusicPlaying = false; PauseMusic(); return; }
+				UpdatePlayingMusicCurrentMusicScoreStartTicks(_musicUpdateCts).Forget();
 				return;
 			}
 			uint playbackId = SoundManager.Instance.PrepareIngameBGM(_model.AssetbundleName, playbackStartTime);
@@ -2419,6 +2440,13 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 					continue;
 				}
 				long ticks = MusicScoreMakerUtility.GetTicksFromTime(_model.CurrentMusicTime, _model.MusicScoreMakerData.MusicScoreEventDataList);
+				if (_assistPlaybackActive && AudioAssist != null && ticks < beforeTicks)
+				{
+					UpdateMusicScoreSe(AssistTicks(AudioAssist.State.loopB) - 1, beforeTicks);
+					StopLongNoteSe();
+					beforeTicks = AssistTicks(AudioAssist.State.loopA);
+					StartActiveLongNoteSe(beforeTicks);
+				}
 				SetFocusTicks(ticks);
 				UpdateMusicScoreSe(ticks, beforeTicks);
 				beforeTicks = ticks;
@@ -2796,6 +2824,11 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 			if (_model == null || !_model.IsMusicPlaying)
 			{
 				return false;
+			}
+			if (_assistPlaybackActive && AudioAssist != null)
+			{
+				_model.CurrentMusicTime = Mathf.Max(0f, (float)AudioAssist.Transport.Position - _model.FillerSec);
+				return AudioAssist.Transport.Ended || !AudioAssist.Transport.Playing;
 			}
 			long playbackTimeMs = SoundManager.Instance.GetAudioSyncedUnityTimer();
 			if (playbackTimeMs > 0L && (_model.MusicLength <= 0L || playbackTimeMs <= _model.MusicLength))
@@ -7508,6 +7541,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 				return;
 			}
 			(long ticks, int lane) = MusicScoreMakerUtility.CalcPressTicksAndLane(obj.EventData, rect);
+			if (TryPlaceAssistDraft(lane)) return;
 			AddNote(lane, ticks);
 			PlayToolTypeToNoteSe();
 		}

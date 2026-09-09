@@ -258,5 +258,21 @@
   "editor.options.clipboard.limit": "最大剪贴板历史数",
   "editor.options.settings.reset": "重置设置数据",
   "editor.options.clipboard.clear": "清空剪贴板历史",
-  "editor.range_select": "范围选择"
+  "editor.range_select": "范围选择",
+  "menuui.library": "OpenSekai  /  本地曲库",
+  "menuui.back": "‹ 曲库",
+  "menuui.more": "更多 ···",
+  "menuui.basic": "基本信息",
+  "menuui.media": "媒体资源",
+  "menuui.chart": "谱面参数",
+  "menuui.sound": "声音",
+  "menuui.play": "游玩",
+  "menuui.display": "显示",
+  "menuui.editor": "制谱",
+  "menuui.data": "语言与数据",
+  "menuui.light": "浅色",
+  "menuui.dark": "深色",
+  "menuui.theme": "菜单主题（立即生效）",
+  "editor.audio_assist": "采音",
+  "editor.minimap": "小地图"
 }

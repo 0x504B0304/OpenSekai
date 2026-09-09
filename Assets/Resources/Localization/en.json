@@ -258,5 +258,21 @@
   "editor.options.clipboard.limit": "Maximum clipboard history",
   "editor.options.settings.reset": "Reset settings",
   "editor.options.clipboard.clear": "Clear clipboard history",
-  "editor.range_select": "Area select"
+  "editor.range_select": "Area select",
+  "menuui.library": "OpenSekai  /  Library",
+  "menuui.back": "‹ Library",
+  "menuui.more": "More ···",
+  "menuui.basic": "Basic",
+  "menuui.media": "Media",
+  "menuui.chart": "Chart",
+  "menuui.sound": "Sound",
+  "menuui.play": "Play",
+  "menuui.display": "Display",
+  "menuui.editor": "Editor",
+  "menuui.data": "Language / data",
+  "menuui.light": "Light",
+  "menuui.dark": "Dark",
+  "menuui.theme": "Menu theme (applies immediately)",
+  "editor.audio_assist": "Audio assist",
+  "editor.minimap": "Minimap"
 }

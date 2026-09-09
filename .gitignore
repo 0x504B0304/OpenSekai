@@ -121,3 +121,8 @@ InitTestScene*.unity*
 
 # API keys for cloud community features to be added to jsfttool later
 jsofttool.json
+
+# Optional local audio-analysis runtime and model cache
+/.audio-assist-venv/
+/.audio-assist-models/
+/.audio-assist-bundle/

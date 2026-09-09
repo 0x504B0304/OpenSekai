@@ -223,10 +223,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Input
 
 		private void DetectPinch()
 		{
-			if (UnityEngine.Input.touchSupported && UnityEngine.Input.touchCount > 1 && UnityEngine.Input.touchCount == 2)
+			if (_isPointerDown && UnityEngine.Input.touchSupported && UnityEngine.Input.touchCount == 2)
 			{
 				Touch touch0 = UnityEngine.Input.GetTouch(0);
 				Touch touch1 = UnityEngine.Input.GetTouch(1);
+				if (_rectTransform == null) _rectTransform = GetComponent<RectTransform>();
+				var camera = _pointerDownEventData?.pressEventCamera;
+				if (_rectTransform == null || !RectTransformUtility.RectangleContainsScreenPoint(_rectTransform, touch0.position, camera)
+					|| !RectTransformUtility.RectangleContainsScreenPoint(_rectTransform, touch1.position, camera))
+				{ _isPinching = false; _previousPinchDistance = 0; return; }
 				float distance = Vector2.Distance(touch0.position, touch1.position);
 				if (!_isPinching)
 				{

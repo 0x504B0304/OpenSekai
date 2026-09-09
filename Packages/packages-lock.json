@@ -365,6 +365,14 @@
         "com.unity.modules.physics": "1.0.0"
       }
     },
+    "com.unity.uiextensions": {
+      "version": "file:com.unity.uiextensions",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.ugui": "2.0.0"
+      }
+    },
     "com.yasirkula.nativefilepicker": {
       "version": "https://github.com/yasirkula/UnityNativeFilePicker.git",
       "depth": 0,

@@ -762,19 +762,20 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private void OnPinch(float pinchDelta)
 		{
-			if (IsSelectedObjectExpandInputDragging() || IsDialogOrSubWindowActive())
+			if (IsSelectedObjectExpandInputDragging() || IsDialogOrSubWindowActive() || MusicScoreMakerUtility.IsMusicPlaying())
 			{
 				return;
 			}
 
-			if (pinchDelta <= 0f)
+			var canvas = GetComponentInParent<Canvas>();
+			var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+			for (int i = 0; i < UnityEngine.Input.touchCount; i++)
+				if (!RectTransformUtility.RectangleContainsScreenPoint(NotesViewRectTransform, UnityEngine.Input.GetTouch(i).position, camera)) return;
+			float scale = MusicScoreMakerUtility.GetCurrentMusicScoreScale() * Mathf.Exp(-pinchDelta / Mathf.Max(160, Screen.height * .5f));
+			MusicScoreMakerEventDispatcher.Instance.Publish(new SetZoomTimelineScaleEvent
 			{
-				MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomInTimelineEvent());
-			}
-			else
-			{
-				MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomOutTimelineEvent());
-			}
+				Scale = Mathf.Clamp(scale, MusicScoreMakerSettingsManager.ZoomTimelineScaleMin, MusicScoreMakerSettingsManager.ZoomTimelineScaleMax)
+			});
 		}
 
 		private bool IsDialogOrSubWindowActive()

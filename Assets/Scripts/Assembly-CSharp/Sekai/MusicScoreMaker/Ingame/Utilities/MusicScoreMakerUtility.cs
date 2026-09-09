@@ -1203,6 +1203,22 @@ namespace Sekai.MusicScoreMaker.Ingame.Utilities
 			return GetTimeFromTicksBpmOnly(ticks, bpmEvents, bpmEvents.Length);
 		}
 
+		// Build once per waveform mesh, preserving sub-tick positions at high zoom.
+		public static Func<double, double> CreatePreciseTimeConverter(MusicScoreInfo[] musicScoreInfoArray)
+		{
+			var events = BuildBpmEvents(musicScoreInfoArray);
+			var times = new double[events.Length];
+			for (int i = 1; i < events.Length; i++)
+				times[i] = times[i - 1] + (events[i].ticks - events[i - 1].ticks) * (60d / TICKS_PER_BEAT) / (events[i - 1].bpm > 0 ? events[i - 1].bpm : DEFAULT_BPM);
+			return ticks =>
+			{
+				if (events.Length == 0) return 0;
+				int low = 0, high = events.Length - 1;
+				while (low < high) { int middle = (low + high + 1) / 2;if (events[middle].ticks <= ticks) low = middle;else high = middle - 1; }
+				return times[low] + (ticks - events[low].ticks) * (60d / TICKS_PER_BEAT) / (events[low].bpm > 0 ? events[low].bpm : DEFAULT_BPM);
+			};
+		}
+
 		public static float CalcPreviewPositionYFromTicks(long startTicks, long endTicks, Vector2 parentSizeDelta, Vector2 parentPosition, long ticks)
 		{
 			return parentPosition.y + parentSizeDelta.y * CalcNormalizedPositionFromTicks(startTicks, endTicks, ticks) + parentSizeDelta.y * -0.5f;

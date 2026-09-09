@@ -73,6 +73,8 @@ namespace Sekai.EditorTools
 
 		private static bool IsPlayerFile(string relative)
 		{
+			// This decoder is part of the analysis engine in both release variants.
+			if (relative.StartsWith("AudioAssistEngine/", StringComparison.OrdinalIgnoreCase)) return true;
 			string[] parts = relative.Split('/');
 			if (parts.Any(part => part.IndexOf("DoNotShip", StringComparison.OrdinalIgnoreCase) >= 0 ||
 				part.IndexOf("ButDontShipItWithYourGame", StringComparison.OrdinalIgnoreCase) >= 0 ||

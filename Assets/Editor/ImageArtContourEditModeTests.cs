@@ -23,7 +23,7 @@ using UnityEngine.UI;
 public sealed class ImageArtContourEditModeTests
 {
 	[Test]
-	public void ArtPanelUsesTransparentBackgroundLayers()
+	public void ArtPanelOccludesUnderlyingControls()
 	{
 		var canvas = new GameObject("ArtPanelCanvas", typeof(RectTransform), typeof(Canvas));
 		var toolWindow = new GameObject("ToolWindow", typeof(RectTransform));
@@ -38,8 +38,8 @@ public sealed class ImageArtContourEditModeTests
 			var viewport = panel.transform.Find("ArtControlsViewport");
 			var container = panel.GetComponentsInChildren<Transform>(true).First(item => item.name == "Container");
 
-			Assert.AreEqual(190, ToByte(panel.GetComponent<Image>().color.a));
-			Assert.AreEqual(190, ToByte(viewport.GetComponent<Image>().color.a));
+			Assert.AreEqual(255, ToByte(panel.GetComponent<Image>().color.a));
+			Assert.AreEqual(255, ToByte(viewport.GetComponent<Image>().color.a));
 			Assert.AreEqual(205, ToByte(container.GetComponent<Image>().color.a));
 		}
 		finally { UnityEngine.Object.DestroyImmediate(canvas); }

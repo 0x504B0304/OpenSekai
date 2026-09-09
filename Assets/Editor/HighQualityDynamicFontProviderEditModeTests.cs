@@ -135,10 +135,12 @@ namespace Sekai.EditorTools.Tests
 			Assert.That(runtimeFont.atlasHeight, Is.EqualTo(2048));
 			Assert.That(runtimeFont.atlasPadding, Is.EqualTo(9));
 #endif
-			Assert.That(
-				runtimeFont.TryAddCharacters("OpenSekai 本地谱面 设置 刷新 导入", out string missingCharacters),
-				Is.True,
-				missingCharacters);
+			const string caption = "OpenSekai 本地谱面 设置 刷新 导入";
+			// TMP returns false when every requested glyph is already cached. Other
+			// UI tests can legitimately warm this shared runtime font before this case.
+			runtimeFont.TryAddCharacters(caption);
+			foreach (char character in caption)
+				Assert.That(runtimeFont.HasCharacter(character), Is.True, $"Missing UI glyph: {character}");
 		}
 	}
 }
