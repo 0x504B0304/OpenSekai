@@ -679,7 +679,9 @@ namespace Sekai.Core.Live
 				return false;
 			}
 
-			return lastTouch.phase != InputTouchPhase.Ended;
+			// Android can reuse a touch ID after release. A fresh press starts a new
+			// contact even when this ID's previous contact ended or was canceled.
+			return !IsEndedOrCanceled(lastTouch.phase) || touch.phase == InputTouchPhase.Began;
 		}
 
 		private void UpdateLastTouch(ref EnhancedTouch touch)
@@ -693,7 +695,7 @@ namespace Sekai.Core.Live
 			InputTouchPhase phase = touch.phase;
 			double time = touch.time;
 			if (lastTouches.TryGetValue(touchId, out var lastTouch)
-				&& time.Equals(lastTouch.time))
+				&& time.Equals(lastTouch.time) && !IsEndedOrCanceled(lastTouch.phase))
 			{
 				if (IsEndedOrCanceled(phase) || phase == InputTouchPhase.None)
 				{
