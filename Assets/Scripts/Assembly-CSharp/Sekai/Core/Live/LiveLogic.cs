@@ -73,6 +73,7 @@ namespace Sekai.Core.Live
 		private LiveBootDataBase bootData;
 		private LiveViewBase[] liveViews;
 		private MusicScore musicScore;
+		private LiveSpeedIntegralCache speedIntegralCache;
 		private NoteBase[] noteArray = Array.Empty<NoteBase>();
 		private NoteBase[] highSpeedNoteArray = Array.Empty<NoteBase>();
 		private EventBase[] eventArray = Array.Empty<EventBase>();
@@ -155,6 +156,7 @@ namespace Sekai.Core.Live
 
 			musicScore.InjectSkillFeverForCreatorScore(bootData?.MusicData?.Vocal?.musicId ?? bootData?.MusicData?.Music?.id ?? 0);
 			noteArray = SortNotes(musicScore.NoteArray);
+			speedIntegralCache = new LiveSpeedIntegralCache(musicScore.musicScoreInfoArray, noteArray);
 			highSpeedNoteArray = noteArray.Where(note => note != null && !Mathf.Approximately(note.speedRatio, 1f)).ToArray();
 			eventArray = SortEvents(musicScore.EventArray);
 			BindNoteCallbacks(noteArray);
@@ -241,6 +243,7 @@ namespace Sekai.Core.Live
 
 			musicScore?.Update(scoreInfoTime);
 			currentFrameInfo = MusicScore.CurrentFrameInfo;
+			speedIntegralCache?.BeginUpdate(currentFrameInfo.bar + currentFrameInfo.barProgress, currentFrameInfo.speedRatio);
 			this.currentGameTime = currentGameTime;
 
 			UpdateSeVolume();
@@ -1369,74 +1372,9 @@ namespace Sekai.Core.Live
 
 		private float CalcNoteSpeedRatio(float currentProgress, float noteProgress)
 		{
-			if (noteProgress <= currentProgress)
-			{
-				return currentFrameInfo.speedRatio;
-			}
-
-			MusicScoreInfo[] scoreInfos = musicScore?.musicScoreInfoArray;
-			if (scoreInfos == null || scoreInfos.Length == 0)
-			{
-				return currentFrameInfo.speedRatio;
-			}
-
-			float accumulated = 0f;
-			bool hasRange = false;
-			float previousProgress = scoreInfos[0].bar + scoreInfos[0].barProgress;
-			float previousSpeedRatio = scoreInfos[0].speedRatio;
-
-			for (int i = 0; i <= scoreInfos.Length; i++)
-			{
-				float segmentProgress = i < scoreInfos.Length
-					? scoreInfos[i].bar + scoreInfos[i].barProgress
-					: noteProgress;
-				float segmentSpeedRatio = i < scoreInfos.Length ? scoreInfos[i].speedRatio : previousSpeedRatio;
-
-				if (segmentProgress >= currentProgress)
-				{
-					if (hasRange)
-					{
-						if (segmentProgress > noteProgress)
-						{
-							accumulated += (noteProgress - previousProgress) * previousSpeedRatio;
-							break;
-						}
-
-						accumulated += (segmentProgress - previousProgress) * previousSpeedRatio;
-					}
-					else if (i > 0)
-					{
-						if (segmentProgress > noteProgress)
-						{
-							return currentFrameInfo.speedRatio;
-						}
-
-						accumulated += (segmentProgress - currentProgress) * scoreInfos[i - 1].speedRatio;
-					}
-					else
-					{
-						accumulated += segmentProgress - currentProgress;
-					}
-
-					hasRange = true;
-				}
-
-				if (segmentProgress >= noteProgress)
-				{
-					break;
-				}
-
-				previousProgress = segmentProgress;
-				previousSpeedRatio = segmentSpeedRatio;
-			}
-
-			if (!hasRange)
-			{
-				return previousSpeedRatio;
-			}
-
-			float range = noteProgress - currentProgress;
-			return Mathf.Approximately(range, 0f) ? currentFrameInfo.speedRatio : accumulated / range;
+			return speedIntegralCache != null
+				? speedIntegralCache.Calculate(currentProgress, noteProgress, currentFrameInfo.speedRatio)
+				: LiveSpeedIntegralCache.CalculateLegacy(musicScore?.musicScoreInfoArray, currentProgress, noteProgress, currentFrameInfo.speedRatio);
 		}
 
 		private void BindNoteCallbacks(NoteBase[] notes)
