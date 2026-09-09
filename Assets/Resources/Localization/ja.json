@@ -1,4 +1,6 @@
 {
+  "settings.max_fps": "最大フレームレート",
+  "settings.max_fps.auto": "自動",
   "language.name": "日本語",
   "common.ok": "OK",
   "common.cancel": "キャンセル",

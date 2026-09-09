@@ -166,6 +166,8 @@ namespace Sekai.CustomMusicScoreManager
 		private TMP_InputField _settingJudgeLineAlphaInput;
 		private TextMeshProUGUI _settingAutoSaveIntervalLabel;
 		private int _settingAutoSaveIntervalIndex;
+		private TextMeshProUGUI _settingMaxFrameRateLabel;
+		private int _settingMaxFrameRate;
 		private TextMeshProUGUI _settingScoreMakerPreviewModeLabel;
 		private int _settingScoreMakerPreviewModeIndex;
 		private TextMeshProUGUI _settingNoteSkinLabel;
@@ -467,6 +469,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingGuideLineAlphaInput = CreateInputField(settingsContent, "Guide线不透明度", "10 - 100");
 			_settingJudgeLineAlphaInput = CreateInputField(settingsContent, "判定线不透明度", "0 - 100");
 			CreateSettingAutoSaveIntervalSelector(settingsContent);
+			CreateSettingMaxFrameRateSelector(settingsContent);
 			CreateSettingNoteSkinSelector(settingsContent);
 			CreateSettingNoteSeSelector(settingsContent);
 			CreateSettingNoteEffectSelector(settingsContent);
@@ -501,6 +504,7 @@ namespace Sekai.CustomMusicScoreManager
 		private void SetLanguage(string language)
 		{
 			LocalizationManager.SetLanguage(language);
+			SetMaxFrameRate(_settingMaxFrameRate);
 			RefreshLanguageDropdownLabel();
 			SetLanguageDropdownExpanded(false);
 			foreach (RowView row in _rows)
@@ -538,6 +542,7 @@ namespace Sekai.CustomMusicScoreManager
 			_settingGuideLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetGuideAlpha() * 100f));
 			_settingJudgeLineAlphaInput.SetTextWithoutNotify(FormatSettingValue(liveSettingData.GetJudgeLineAlpha() * 100f));
 			SetAutoSaveInterval(liveSettingData.AutoSaveIntervalIndex);
+			SetMaxFrameRate(CP.FramerateUtility.GetConfiguredFrameRate(liveSettingData));
 			SetScoreMakerPreviewMode(liveSettingData.ScoreMakerPreviewModeIndex);
 			SetSettingNoteSkinIndex(liveSettingData.NoteSkinIndex);
 			SetSettingNoteSeIndex(liveSettingData.NoteSeIndex);
@@ -704,6 +709,7 @@ namespace Sekai.CustomMusicScoreManager
 				liveSettingData.GetJudgeLineAlpha() * 100f) / 100f;
 			liveSettingData.NoteSkinIndex = _settingNoteSkinIndex;
 			liveSettingData.AutoSaveIntervalIndex = _settingAutoSaveIntervalIndex;
+			liveSettingData.MaxFrameRate = _settingMaxFrameRate;
 			liveSettingData.ScoreMakerPreviewModeIndex = _settingScoreMakerPreviewModeIndex;
 			liveSettingData.NoteSeIndex = _settingNoteSeIndex;
 			liveSettingData.NoteEffect = _settingNoteEffectIndex;
@@ -859,6 +865,48 @@ namespace Sekai.CustomMusicScoreManager
 			if (string.Equals(language, LocalizationManager.SimplifiedChinese, StringComparison.OrdinalIgnoreCase)) return "简体中文";
 			if (string.Equals(language, LocalizationManager.Japanese, StringComparison.OrdinalIgnoreCase)) return "日本語";
 			return "English";
+		}
+
+		private void CreateSettingMaxFrameRateSelector(Transform parent)
+		{
+			RectTransform row = CreateRect("MaxFrameRateSelector", parent);
+			LayoutElement layout = row.gameObject.AddComponent<LayoutElement>();
+			layout.preferredHeight = layout.minHeight = 58f;
+			HorizontalLayoutGroup group = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+			group.spacing = 16f;
+			group.childAlignment = TextAnchor.MiddleLeft;
+			group.childControlWidth = group.childControlHeight = true;
+			group.childForceExpandWidth = group.childForceExpandHeight = false;
+			TextMeshProUGUI title = CreateText("Label", row, string.Empty, 24, FontStyles.Bold, TextAlignmentOptions.Left);
+			title.gameObject.AddComponent<LocalizedTextBinding>().Key = "settings.max_fps";
+			LayoutElement titleLayout = title.gameObject.AddComponent<LayoutElement>();
+			titleLayout.preferredWidth = titleLayout.minWidth = 180f;
+			titleLayout.preferredHeight = titleLayout.minHeight = 58f;
+			Button button = CreateButton("Button", row, string.Empty, CycleMaxFrameRate, 220f, 54f);
+			_settingMaxFrameRateLabel = button.GetComponentInChildren<TextMeshProUGUI>();
+			_settingMaxFrameRateLabel.gameObject.AddComponent<LocalizedTextBinding>();
+			SetMaxFrameRate(0);
+		}
+
+		private void CycleMaxFrameRate()
+		{
+			var options = CP.FramerateUtility.FrameRateOptions;
+			int index = 0;
+			for (int i = 0; i < options.Count; i++)
+				if (options[i] == _settingMaxFrameRate) { index = i; break; }
+			SetMaxFrameRate(options[(index + 1) % options.Count]);
+		}
+
+		private void SetMaxFrameRate(int value)
+		{
+			_settingMaxFrameRate = value;
+			if (_settingMaxFrameRateLabel != null)
+			{
+				// An explicit empty key prevents the periodic localization scan from
+				// binding the transient Auto label and overwriting numeric choices.
+				_settingMaxFrameRateLabel.GetComponent<LocalizedTextBinding>().Key = value == 0 ? "settings.max_fps.auto" : string.Empty;
+				if (value != 0) _settingMaxFrameRateLabel.text = value + " FPS";
+			}
 		}
 
 		private void CreateSettingAutoSaveIntervalSelector(Transform parent)

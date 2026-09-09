@@ -73,8 +73,14 @@ namespace Sekai
 		{
 			if (!pauseStatus)
 			{
+				FramerateUtility.SetFrameRate();
 				System.GC.Collect();
 			}
+		}
+
+		private void OnApplicationFocus(bool hasFocus)
+		{
+			if (hasFocus) FramerateUtility.SetFrameRate();
 		}
 
 		private void EnsureEventSystem()

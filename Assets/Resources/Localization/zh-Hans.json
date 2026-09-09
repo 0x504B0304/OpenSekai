@@ -1,4 +1,6 @@
 {
+  "settings.max_fps": "最高帧率",
+  "settings.max_fps.auto": "自动",
   "language.name": "简体中文",
   "common.ok": "确定",
   "common.cancel": "取消",

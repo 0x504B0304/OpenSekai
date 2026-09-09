@@ -111,6 +111,10 @@ namespace Sekai
 		[Key("Use120FPS")]
 		public bool Use120FPS { get; set; }
 
+		// Null preserves old settings; zero selects the display's automatic limit.
+		[Key("MaxFrameRate")]
+		public int? MaxFrameRate { get; set; }
+
 		[Key("UsedVSync")]
 		public bool? UseVSync { get; set; }
 
@@ -300,6 +304,7 @@ namespace Sekai
 				Debug.LogWarningFormat("LiveSettingData could not be saved. path:{0} error:{1}", path, exception.Message);
 			}
 			SUS.Converter.InvalidateLiveSettingCache();
+			CP.FramerateUtility.SetFrameRate();
 		}
 
 		private static string StoragePath => Path.Combine(Application.persistentDataPath, StorageFileName);
