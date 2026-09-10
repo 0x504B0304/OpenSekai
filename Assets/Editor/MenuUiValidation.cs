@@ -41,8 +41,7 @@ public static class MenuUiValidation
         var go=new GameObject("Library",typeof(RectTransform));go.transform.SetParent(canvas.transform,false);MenuControls.Stretch((RectTransform)go.transform);
         var manager=go.AddComponent<ScreenLayerCustomMusicScoreManager>();
         if(Field<RectTransform>(manager,"_menuRoot")==null)Call(manager,"BuildView");
-        var font=TMP_FontAsset.CreateFontAsset(Resources.Load<Font>("Fonts/NotoSansCJKsc-Regular"));
-        foreach(var text in go.GetComponentsInChildren<TMP_Text>(true))text.font=font;
+        MenuTypography.BindTree(go.transform);
         var manifest=new CustomMusicScoreManifest{id="menu-validation",title="冲破穹顶",scoreTitle="EXPERT",userName="OpenSekai",musicDifficultyType="expert",playLevel=26,composer="塞壬唱片-MSR · PMP",fillerSec=9,secForMusicScoreMaker=180};manifest.Normalize();
         var item=new CustomMusicScoreManagerItem(new CustomMusicScoreEntry(Path.GetFullPath("Logs/MenuUI/Fixture"),manifest),DateTime.UtcNow,true,true,true,false);
         var row=Call(manager,"CreateRow",Field<RectTransform>(manager,"_listContent"),item);
@@ -51,11 +50,15 @@ public static class MenuUiValidation
         Call(manager,"UpdateSelection",item);
         try
         {
-            foreach(string screen in new[]{"library-basic","library-media","library-chart","settings-sound","settings-play","settings-display","settings-editor","settings-data"})
+            foreach(string screen in new[]{"library-basic","library-media","library-chart","settings-sound","settings-play","settings-display","settings-editor","settings-data","settings-data-expanded"})
             {
                 bool settingsScreen=screen.StartsWith("settings-");
                 Field<RectTransform>(manager,"_settingsOverlay").gameObject.SetActive(settingsScreen);
-                if(settingsScreen)Call(manager,"SelectMenuSettingsCategory",Array.IndexOf(new[]{"settings-sound","settings-play","settings-display","settings-editor","settings-data"},screen));
+                if(settingsScreen)
+                {
+                    Call(manager,"SelectMenuSettingsCategory",Array.IndexOf(new[]{"settings-sound","settings-play","settings-display","settings-editor","settings-data"},screen.Replace("-expanded","")));
+                    if(screen.EndsWith("-expanded"))Call(manager,"ToggleLanguageDropdown");
+                }
                 else
                 {
                     int category=Array.IndexOf(new[]{"library-basic","library-media","library-chart"},screen);
@@ -66,6 +69,13 @@ public static class MenuUiValidation
                 foreach(var label in go.GetComponentsInChildren<TMP_Text>(true))label.ForceMeshUpdate(true,true);
                 typeof(TMP_FontAsset).GetMethod("UpdateFontAssetsInUpdateQueue",BindingFlags.Static|BindingFlags.NonPublic).Invoke(null,null);
                 Canvas.ForceUpdateCanvases();
+                foreach(var button in Field<RectTransform>(manager,"_menuSettingsScroll").GetComponentsInChildren<Button>(true))
+                {
+                    if(button.GetComponentInParent<MenuSegments>(true)!=null)continue;
+                    foreach(var label in button.GetComponentsInChildren<TMP_Text>(true))
+                        if(Vector4.Distance(label.color,MenuTheme.TabFieldInk)>.01f)
+                            throw new Exception("Settings button ink is not readable on its light field: "+button.name);
+                }
                 foreach(var rounded in go.GetComponentsInChildren<MenuRoundedImage>(true))
                 {
                     rounded.Refresh();var image=rounded.GetComponent<Image>();

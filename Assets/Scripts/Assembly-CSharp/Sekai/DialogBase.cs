@@ -105,12 +105,14 @@ namespace Sekai
 
 		public virtual void Open()
 		{
+			Sekai.MenuUI.MenuTypography.BindTree(transform);
 			if (!gameObject.activeSelf)
 			{
 				gameObject.SetActive(true);
 			}
 
 			OpenPreprocess();
+			Sekai.MenuUI.DialogTextLayout.Prepare(this);
 			OpenAnimation();
 			currentState = DialogState.PlayOpenAnimation;
 			PlayOpenSE();

@@ -116,6 +116,11 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ss]ceneDependencyCache*
 /Assets/StreamingAssets/data
 
+# Local design prototypes and CRIWARE editor-generated settings
+/designs/
+/Assets/CriData/
+/Assets/CriData.meta
+
 *error*.txt
 *error*.log
 

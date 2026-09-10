@@ -3373,6 +3373,14 @@ namespace Sekai
 				return;
 			}
 
+			// The chart editor owns save/cleanup and must discard its screen
+			// instance on exit, just like the visible back button does.
+			if (currentUI?.ScreenLayer is MusicScoreMaker.Ingame.Presenters.ScreenLayerMusicScoreMaker editor)
+			{
+				if (!IsUILayerWorking && !ExistsDialog()) editor.HandleHardwareBackKey();
+				return;
+			}
+
 			BackUIScreen();
 		}
 

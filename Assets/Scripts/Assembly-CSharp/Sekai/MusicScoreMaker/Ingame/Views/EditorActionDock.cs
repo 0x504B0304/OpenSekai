@@ -63,6 +63,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
             var go=new GameObject(name,typeof(RectTransform));go.transform.SetParent(transform,false);
             var label=go.AddComponent<TextMeshProUGUI>();label.font=font;label.color=Color.white;label.raycastTarget=false;
             label.alignment=TextAlignmentOptions.Center;label.textWrappingMode=TextWrappingModes.NoWrap;
+            Sekai.MenuUI.MenuTypography.Bind(label,name=="PlaybackTime"?Sekai.MenuUI.MenuTextRole.Timecode:Sekai.MenuUI.MenuTextRole.Caption);
             return label;
         }
         private void AddButton(string localizationKey,EditorActionIcon.Kind kind,Action action)

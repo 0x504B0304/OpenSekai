@@ -17,6 +17,41 @@ using Object = UnityEngine.Object;
 public sealed class AudioAssistEditModeTests
 {
     [Test]
+    public void AlignmentEndTimesSurviveLoadingAndSessionSaveWithoutFillingSilentGaps()
+    {
+        var output=JsonUtility.FromJson<AssistAnalysisOutput>("{\"lyrics\":[{\"seconds\":12,\"text\":\"テト\",\"syllables\":[{\"seconds\":12.1,\"end\":12.18,\"label\":\"テ\"},{\"seconds\":12.4,\"end\":12.7,\"label\":\"ト\"}]}]}");
+        var state=new AssistState();state.AcceptAlignment(output.lyrics,9);
+        state=JsonUtility.FromJson<AssistState>(JsonUtility.ToJson(state));
+        var point=state.lyrics[0].syllables[0];
+        Assert.AreEqual(12.18,AudioAssistAlgorithms.SyllableEnd(point,12.4,30),1e-8);
+        Assert.AreEqual(.08,point.end-point.seconds,1e-8,"Do not stretch an aligned syllable over the following silence.");
+        state.lyricOffset=.5;
+        Assert.AreEqual(12.68,AudioAssistAlgorithms.SyllableEnd(point,12.4,30)+state.lyricOffset,1e-8);
+    }
+    [Test]
+    public void LegacyDurationRecoveryMatchesTimeAndLabelAndNeverReplacesKnownEnds()
+    {
+        var lyrics=AudioAssistAlgorithms.ParseLrc("[00:12]<00:12>ラ");
+        var point=lyrics[0].syllables[0];
+        Assert.AreEqual(12.25,AudioAssistAlgorithms.SyllableEnd(point,0,30));
+        Assert.AreEqual(12.1,AudioAssistAlgorithms.SyllableEnd(point,12.1,30));
+        var cache=new System.Collections.Generic.List<AssistLyric>{new AssistLyric{syllables=new System.Collections.Generic.List<AssistDraft>{
+            new AssistDraft{seconds=11,end=11.5,label="ラ"},new AssistDraft{seconds=12,end=12.8,label="ヤ"},new AssistDraft{seconds=12,end=12.14,label="ラ"}}}};
+        Assert.IsTrue(AudioAssistAlgorithms.RestoreSyllableEnds(lyrics,cache));
+        Assert.AreEqual(12.14,point.end);
+        cache[0].syllables[2].end=12.9;
+        Assert.IsFalse(AudioAssistAlgorithms.RestoreSyllableEnds(lyrics,cache));Assert.AreEqual(12.14,point.end);
+        Assert.AreEqual(12.12,AudioAssistAlgorithms.SyllableEnd(point,13,12.12));
+    }
+    [Test]
+    public void EnhancedLrcHonorsExplicitTrailingEndTimestampAndRepeatedLineOffset()
+    {
+        var lyrics=AudioAssistAlgorithms.ParseLrc("[offset:250]\n[00:10][00:20]<00:10>テ<00:10.120>ト<00:10.350>");
+        Assert.AreEqual(2,lyrics[0].syllables.Count);
+        Assert.AreEqual(10.6,lyrics[0].syllables[1].end,1e-8);
+        Assert.AreEqual(20.6,lyrics[1].syllables[1].end,1e-8);
+    }
+    [Test]
     public void WaveDividerOwnsRendererWhenCreatedOnAnEmptyRect()
     {
         var go=new GameObject("WaveDivider",typeof(RectTransform));
@@ -162,6 +197,47 @@ public sealed class AudioAssistEditModeTests
         Assert.AreEqual(5.25,presenter.AssistSeconds(1920),1e-6);
         Assert.AreEqual(5.25+1.0/3,presenter.AssistSeconds(2400),1e-5);
         foreach(long tick in new long[]{0,120,1920,2400,6000})Assert.AreEqual(tick,presenter.AssistTicks(presenter.AssistSeconds(tick)),1);
+    }
+    [Test]
+    public void ManualSyllableEditsAndDeletionPersistAndShareUndoWithoutChangingPlacedNotes()
+    {
+        Editor();model.SelectedNoteCategory=NoteCategory.Normal;
+        var draft=new AssistDraft{seconds=10.1,label="existing draft"};controller.State.drafts.Add(draft);controller.SelectedDraft=draft;Place(2);
+        var note=model.MusicScoreMakerData.NoteList.Single();long noteTicks=note.ticks;
+        var point=new AssistDraft{seconds=1.1,end=1.3,label="テ",confidence=.2f};
+        var line=new AssistLyric{seconds=1,text="テト"};line.syllables.Add(point);controller.State.lyrics.Add(line);controller.State.lyricOffset=9;
+        string folder=Path.Combine(Path.GetTempPath(),"OpenSekai-SyllableEdit-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
+        var field=typeof(AudioAssistController).GetField("directory",BindingFlags.NonPublic|BindingFlags.Instance);field.SetValue(controller,folder);
+        try
+        {
+            Assert.IsTrue(controller.EditSyllable(point,"ト",10.15,10.6,out var error),error);
+            Assert.AreEqual(1.15,point.seconds,1e-8);Assert.AreEqual(1.6,point.end,1e-8);Assert.AreEqual("ト",point.label);Assert.IsTrue(point.manuallyEdited);
+            var saved=JsonUtility.FromJson<AssistState>(File.ReadAllText(Path.Combine(folder,"session.json")));
+            Assert.AreEqual("ト",saved.lyrics[0].syllables[0].label);Assert.IsTrue(saved.lyrics[0].syllables[0].manuallyEdited);
+            Assert.IsTrue(controller.DeleteSyllable(point,out error),error);Assert.IsEmpty(line.syllables);
+            dispatcher.Undo();Assert.AreSame(point,line.syllables.Single());Assert.AreEqual("ト",point.label);
+            dispatcher.Undo();Assert.AreEqual("テ",point.label);Assert.AreEqual(1.1,point.seconds);Assert.AreEqual(1.3,point.end);Assert.IsFalse(point.manuallyEdited);
+            dispatcher.Redo();Assert.AreEqual("ト",point.label);dispatcher.Redo();Assert.IsEmpty(line.syllables);
+            Assert.AreEqual(noteTicks,model.MusicScoreMakerData.NoteList.Single().ticks);Assert.AreEqual(10.1,draft.seconds);Assert.AreEqual("existing draft",draft.label);
+            saved=JsonUtility.FromJson<AssistState>(File.ReadAllText(Path.Combine(folder,"session.json")));Assert.IsEmpty(saved.lyrics[0].syllables);
+        }
+        finally{field.SetValue(controller,null);Directory.Delete(folder,true);}
+    }
+    [TestCase(-1,2,"ラ")][TestCase(2,2,"ラ")][TestCase(3,2,"ラ")][TestCase(1,31,"ラ")]
+    [TestCase(double.NaN,2,"ラ")][TestCase(1,double.PositiveInfinity,"ラ")][TestCase(1,2," ")]
+    public void InvalidSyllableEditsDoNotMutateDataOrHistory(double start,double end,string text)
+    {
+        Editor();var point=new AssistDraft{seconds=1,end=2,label="ラ"};var line=new AssistLyric();line.syllables.Add(point);controller.State.lyrics.Add(line);
+        Assert.IsFalse(controller.EditSyllable(point,text,start,end,out var error));Assert.IsNotEmpty(error);
+        Assert.AreEqual(1,point.seconds);Assert.AreEqual(2,point.end);Assert.AreEqual("ラ",point.label);Assert.IsFalse(dispatcher.CanUndo);
+    }
+    [Test]
+    public void UndoOfAnOldSyllableEditCannotReinsertLyricsReplacedByReanalysis()
+    {
+        Editor();var point=new AssistDraft{seconds=1,end=2,label="ラ"};var line=new AssistLyric();line.syllables.Add(point);controller.State.lyrics.Add(line);
+        Assert.IsTrue(controller.DeleteSyllable(point,out _));
+        controller.State.AcceptAlignment(AudioAssistAlgorithms.ParseLrc("[00:01]新歌词"),0);
+        dispatcher.Undo();Assert.AreEqual("新歌词",controller.State.lyrics.Single().text);Assert.IsEmpty(controller.State.lyrics[0].syllables);
     }
 
     [Test]

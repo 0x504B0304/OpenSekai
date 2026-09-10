@@ -160,11 +160,13 @@ namespace Sekai.Localization
 			TMP_Text[] texts = FindObjectsByType<TMP_Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 			foreach (TMP_Text text in texts)
 			{
+				Sekai.MenuUI.MenuTypography.TryBind(text);
 				TryBind(text);
 			}
 			UnityEngine.UI.Text[] legacyTexts = FindObjectsByType<UnityEngine.UI.Text>(FindObjectsInactive.Include, FindObjectsSortMode.None);
 			foreach (UnityEngine.UI.Text text in legacyTexts)
 			{
+				Sekai.MenuUI.MenuTypography.TryBind(text);
 				TryBind(text);
 			}
 		}
@@ -179,7 +181,8 @@ namespace Sekai.Localization
 				return true;
 			}
 			if (!SourceKeys.TryGetValue(text.text, out string key)) return false;
-			LocalizedTextBinding binding = text.gameObject.AddComponent<LocalizedTextBinding>();
+            LocalizedTextBinding binding = text.gameObject.AddComponent<LocalizedTextBinding>();
+            if (text.GetComponentInParent<Sekai.MenuUI.DialogTextLayout>() != null) binding.PreserveLayout = true;
 			binding.Key = key;
 			return true;
 		}

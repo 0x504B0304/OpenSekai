@@ -30,6 +30,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Utilities
                 return;
             }
 
+            // A label click auditions audio. Delete still belongs to that label
+            // during audition, and must not fall through to chart-note deletion.
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Delete)&&CanHandleKeyboardInput(true)
+                &&AudioAssist.AudioAssistSyllableDialog.TryDeleteSelection())return;
+
+            if(AudioAssist.AudioAssistSyllableDialog.IsTimeEditing)
+            {
+                if(!AudioAssist.AudioAssistSyllableDialog.IsDragging&&CanHandleKeyboardInput(true))
+                {HandleUndoShortcut();HandleRedoShortcut();}
+                return;
+            }
+
             if (!CanHandleKeyboardInput())
             {
                 return;
@@ -196,8 +208,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Utilities
             }
         }
 
-        private static bool CanHandleKeyboardInput()
+        private static bool CanHandleKeyboardInput(bool syllableDelete=false)
         {
+            if(AudioAssist.AudioAssistSyllableDialog.IsOpen&&!syllableDelete)return false;
             if (!Application.isFocused
                 || !MusicScoreMakerEventDispatcher.ExistsInstance
                 || UnityEngine.Input.GetKey(KeyCode.LeftAlt)
@@ -206,7 +219,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Utilities
                 || UnityEngine.Input.GetMouseButton(1)
                 || UnityEngine.Input.GetMouseButton(2)
                 || UnityEngine.Input.touchCount > 0
-                || IsMusicPlaying()
+                || (!syllableDelete&&IsMusicPlaying())
                 || IsEditRestricted())
             {
                 return false;

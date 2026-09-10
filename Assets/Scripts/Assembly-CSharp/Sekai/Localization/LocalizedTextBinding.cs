@@ -9,6 +9,8 @@ namespace Sekai.Localization
 	{
 		[SerializeField] private string _key;
 		private TMP_Text _text;
+		// Compact runtime controls own their wrapping and overflow settings.
+		public bool PreserveLayout { get; set; }
 
 		public string Key
 		{
@@ -37,8 +39,11 @@ namespace Sekai.Localization
 			if (_text == null) _text = GetComponent<TMP_Text>();
 			if (_text != null && !string.IsNullOrEmpty(_key))
 			{
-				_text.textWrappingMode = TextWrappingModes.Normal;
-				_text.overflowMode = TextOverflowModes.Ellipsis;
+				if (!PreserveLayout)
+				{
+					_text.textWrappingMode = TextWrappingModes.Normal;
+					_text.overflowMode = TextOverflowModes.Ellipsis;
+				}
 				_text.text = LocalizationManager.Get(_key);
 			}
 		}

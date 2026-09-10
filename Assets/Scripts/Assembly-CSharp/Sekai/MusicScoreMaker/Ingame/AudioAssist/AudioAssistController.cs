@@ -16,6 +16,7 @@ using UnityEngine.Networking;
 
 namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
 {
+    public enum AssistAnalysisStatus { Idle, Running, Completed, Canceled, Failed }
     public sealed class AudioAssistController : MonoBehaviour
     {
         public static readonly string[] Keys = { "original", "vocals", "instrumental", "drums", "bass", "other" };
@@ -36,6 +37,11 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public string Status = "点击“采音”展开辅助面板";
         public bool Busy { get; private set; }
         public bool Analyzing { get; private set; }
+        public AssistAnalysisStatus AnalysisStatus { get; private set; }
+        public float AnalysisProgress { get; private set; }
+        public string AnalysisStage { get; private set; } = "";
+        public AssistDraft SelectedSyllable { get; private set; }
+        public double SelectedSyllableEnd { get; private set; }
         public bool BlocksPlayback => Busy && !Analyzing;
         public event Action Changed;
         private string directory, lrcPath;
@@ -86,6 +92,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             if (entry != null && entry.RegisteredAudioClip == null) await entry.RegisterAudioAsync(token);
             if (entry?.RegisteredAudioClip != null) await LoadClip("original", entry.RegisteredAudioClip, false, token);
             await CheckSource(token);
+            RestoreCachedSyllableEnds();
             foreach (var state in State.stems.ToArray())
             {
                 token.ThrowIfCancellationRequested();
@@ -104,11 +111,103 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             Busy = true;job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);Refresh();
             try { await operation(job.Token); }
-            catch (OperationCanceledException) { if (this != null) Status = "已取消，已有谱面不变"; }
-            catch (Exception ex) { if (this != null) { Status = "处理失败：" + ex.Message;Debug.LogWarning("Audio assist: " + ex); } }
+            catch (OperationCanceledException) { if (this != null) { Status = "已取消，已有谱面不变";if(AnalysisStatus==AssistAnalysisStatus.Running)AnalysisStatus=AssistAnalysisStatus.Canceled; } }
+            catch (Exception ex) { if (this != null) { Status = "处理失败：" + ex.Message;if(AnalysisStatus==AssistAnalysisStatus.Running)AnalysisStatus=AssistAnalysisStatus.Failed;Debug.LogWarning("Audio assist: " + ex); } }
             finally { job?.Dispose();job = null;Busy = false;if (this != null) Refresh(); }
         }
         public void Cancel() => job?.Cancel();
+        private void RestoreCachedSyllableEnds()
+        {
+            if (!State.lyrics.Any(l => l.syllables.Any(p => !AudioAssistAlgorithms.HasSyllableEnd(p)))) return;
+            bool changed = false;
+            foreach (var folder in new DirectoryInfo(directory).GetDirectories("analysis_*").OrderByDescending(d => d.LastWriteTimeUtc))
+            {
+                string result = Path.Combine(folder.FullName, "result.json");
+                if (!File.Exists(result)) continue;
+                try { changed |= AudioAssistAlgorithms.RestoreSyllableEnds(State.lyrics, JsonUtility.FromJson<AssistAnalysisOutput>(File.ReadAllText(result))?.lyrics); }
+                catch (Exception ex) when (ex is IOException || ex is ArgumentException) { Debug.LogWarning("Skipping old alignment cache: " + ex.Message); }
+                if (State.lyrics.All(l => l.syllables.All(AudioAssistAlgorithms.HasSyllableEnd))) break;
+            }
+            if (changed) Save();
+        }
+        public void SelectSyllable(AssistDraft point, double end)
+        {
+            if (Busy) return;
+            SetPoint(point.seconds + State.lyricOffset);
+            SelectedSyllable = point;SelectedSyllableEnd = end;
+            Refresh();
+            Audition(point.seconds + State.lyricOffset - .025, end + State.lyricOffset, false);
+        }
+        public void FocusSyllable(AssistDraft point,double end)
+        {
+            SelectedDraft=null;SelectedSyllable=point;SelectedSyllableEnd=end;
+            SelectedSeconds=point.seconds+State.lyricOffset;Refresh();
+        }
+        public void ClearSyllableSelection(AssistDraft point)
+        {
+            if(SelectedSyllable==point){SelectedSyllable=null;Refresh();}
+        }
+        public double SyllableEnd(AssistDraft point)=>AudioAssistAlgorithms.SyllableEnd(point,
+            State.lyrics.SelectMany(l=>l.syllables).Where(p=>p.seconds>point.seconds).Select(p=>p.seconds).DefaultIfEmpty(0).Min(),
+            Transport.Duration-State.lyricOffset);
+        private AssistLyric EditableSyllableLine(AssistDraft point, out string error)
+        {
+            error="";
+            if(Busy){error="正在处理音频，请完成或取消后再编辑";return null;}
+            if(Presenter.Model.IsEditRestricted){error="当前谱面禁止编辑";return null;}
+            var line=State.lyrics.FirstOrDefault(l=>l.syllables.Contains(point));
+            if(line==null)error="此音节已删除或被新的对齐结果替换";
+            return line;
+        }
+        public bool ValidateSyllableEdit(AssistDraft point, string label, double start, double end, out string error)
+        {
+            if(EditableSyllableLine(point,out error)==null)return false;
+            if(string.IsNullOrWhiteSpace(label)){error="标签内容不能为空";return false;}
+            if(double.IsNaN(start)||double.IsInfinity(start)||double.IsNaN(end)||double.IsInfinity(end)||start<0||end>Transport.Duration||end<=start)
+            {error="起止时间须在歌曲范围内，结束时间须大于起始时间";return false;}
+            return true;
+        }
+        public bool EditSyllable(AssistDraft point, string label, double start, double end, out string error)
+        {
+            if(!ValidateSyllableEdit(point,label,start,end,out error))return false;
+            var line=State.lyrics.First(l=>l.syllables.Contains(point));
+            double beforeStart=point.seconds,beforeEnd=point.end;
+            string beforeLabel=point.label;bool beforeEdited=point.manuallyEdited;
+            // Inputs are displayed audio time, including the current lyric offset.
+            double afterStart=start-State.lyricOffset,afterEnd=end-State.lyricOffset;
+            string afterLabel=label.Trim();Presenter.PauseAssist();
+            void Apply(double a,double b,string text,bool edited)
+            {
+                if(!State.lyrics.Contains(line)||!line.syllables.Contains(point))return;
+                point.seconds=a;point.end=b;point.label=text;point.manuallyEdited=edited;
+                line.syllables.Sort((x,y)=>x.seconds.CompareTo(y.seconds));
+                SelectedSyllable=point;SelectedSyllableEnd=AudioAssistAlgorithms.SyllableEnd(point,
+                    line.syllables.Where(p=>p.seconds>a).Select(p=>p.seconds).DefaultIfEmpty(0).Min(),Transport.Duration-State.lyricOffset);
+                SelectedSeconds=a+State.lyricOffset;
+                Status="已调整音节；可撤销或重做";Save();
+            }
+            Presenter.AssistHistory(()=>Apply(beforeStart,beforeEnd,beforeLabel,beforeEdited),()=>Apply(afterStart,afterEnd,afterLabel,true));
+            return true;
+        }
+        public bool DeleteSyllable(AssistDraft point, out string error)
+        {
+            var line=EditableSyllableLine(point,out error);if(line==null)return false;
+            int index=line.syllables.IndexOf(point);Presenter.PauseAssist();
+            Presenter.AssistHistory(()=>
+            {
+                if(!State.lyrics.Contains(line)||line.syllables.Contains(point))return;
+                line.syllables.Insert(Math.Min(index,line.syllables.Count),point);SelectedSyllable=point;
+                SelectedSyllableEnd=AudioAssistAlgorithms.SyllableEnd(point,
+                    line.syllables.Where(p=>p.seconds>point.seconds).Select(p=>p.seconds).DefaultIfEmpty(0).Min(),Transport.Duration-State.lyricOffset);
+                SelectedSeconds=point.seconds+State.lyricOffset;Save();
+            },()=>
+            {
+                if(!State.lyrics.Contains(line))return;
+                line.syllables.Remove(point);if(SelectedSyllable==point)SelectedSyllable=null;
+                Status="已删除音节标签；可撤销恢复";Save();
+            });
+            return true;
+        }
         public void Refresh() { if (!shuttingDown) Changed?.Invoke(); }
         public void ClearAuditionEnd() => stopAt = -1;
         public void Save()
@@ -222,7 +321,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         });
         public void SetPoint(double seconds)
         {
-            SelectedDraft = null;SelectedSeconds = Math.Max(0, Math.Min(Transport.Duration, seconds));Presenter.SeekAssist(SelectedSeconds);Refresh();
+            SelectedSyllable = null;SelectedDraft = null;SelectedSeconds = Math.Max(0, Math.Min(Transport.Duration, seconds));Presenter.SeekAssist(SelectedSeconds);Refresh();
         }
         public void AddDraft(double seconds, string label = "") => AddDrafts(new[] { new AssistDraft { seconds = seconds, label = label } });
         public void AddDrafts(IEnumerable<AssistDraft> points)
@@ -262,7 +361,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public void Audition(double from, double to, bool loop)
         {
             if (!Ready) return;
-            State.loopA = Math.Max(0, from);State.loopB = Math.Min(Transport.Duration, Math.Max(from + .15, to));State.loop = loop;
+            State.loopA = Math.Max(0, from);State.loopB = Math.Min(Transport.Duration, Math.Max(State.loopA + (loop ? .15 : .01), to));State.loop = loop;
             Presenter.PlayAssist(State.loopA);stopAt = loop ? -1 : State.loopB;Refresh();
         }
         public void AnalyzeLocal(string language)
@@ -271,6 +370,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         }
         private async Task Analyze(string language, bool alignLyrics, CancellationToken token)
         {
+                AnalysisStatus=AssistAnalysisStatus.Running;AnalysisProgress=0;AnalysisStage="准备分析";Refresh();
                 Presenter.PauseAssist();
                 string audioPath = SourcePath();
                 if (string.IsNullOrEmpty(audioPath) || !File.Exists(audioPath)) throw new IOException("请先导入原曲文件");
@@ -280,18 +380,27 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 try
                 {
                     output = await AudioAssistLocalAnalysis.Run(audioPath, alignLyrics && File.Exists(lrcPath) ? lrcPath : null, directory, language, alignmentOffset,
-                        message => { Status = message + "（可继续原曲回听）";Refresh(); }, token);
+                        (message, progress) => { AnalysisStage=message;AnalysisProgress=Math.Max(AnalysisProgress,progress*.94f);Status = message + "（可继续原曲回听）";Refresh(); }, token);
                 }
                 finally { Analyzing = false;Refresh(); }
                 token.ThrowIfCancellationRequested();Presenter.PauseAssist();
+                int loaded=0;
                 foreach (var stem in output.stems)
                 {
+                    AnalysisProgress=.94f+.05f*loaded/Math.Max(1,output.stems.Count);
+                    AnalysisStage="读取分轨与波形 "+(loaded+1)+"/"+output.stems.Count;Refresh();
                     string dest = Path.Combine(directory, stem.key + "_" + Guid.NewGuid().ToString("N") + ".wav");
                     File.Copy(stem.path, dest);
                     await LoadFile(stem.key, dest, token);
                     var state = State.stems.First(s => s.key == stem.key);state.path = Path.GetFileName(dest);state.offset = 0;
+                    loaded++;
                 }
-                if (output.lyrics != null && output.lyrics.Count > 0) State.AcceptAlignment(output.lyrics, alignmentOffset);
+                if (output.lyrics != null && output.lyrics.Count > 0)
+                {
+                    State.AcceptAlignment(output.lyrics, alignmentOffset);SelectedSyllable=null;
+                    if(Transport.Tracks.ContainsKey("vocals")&&!Visible.Contains("vocals"))Visible.Add("vocals");
+                }
+                AnalysisProgress=1;AnalysisStage="分析完成";AnalysisStatus=AssistAnalysisStatus.Completed;
                 Status = output.warnings != null && output.warnings.Count > 0
                     ? "分析完成，需核对：" + string.Join("；", output.warnings)
                     : "内置分析完成，分轨已缓存；点击声部按钮加入混音";Save();

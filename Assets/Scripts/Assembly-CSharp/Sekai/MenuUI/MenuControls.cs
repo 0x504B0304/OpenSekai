@@ -89,13 +89,13 @@ namespace Sekai.MenuUI
         public static TMP_Text Text(Transform root,string value,TMP_FontAsset font,float size=22)
         {
             var rect=Rect("Label",root);var t=rect.gameObject.AddComponent<TextMeshProUGUI>();t.font=font;t.text=value;t.fontSize=size;t.color=MenuTheme.Text;t.raycastTarget=false;t.alignment=TextAlignmentOptions.MidlineLeft;
-            t.textWrappingMode=TextWrappingModes.Normal;MenuThemeBinding.Bind(t,MenuColor.Text);return t;
+            t.textWrappingMode=TextWrappingModes.Normal;MenuThemeBinding.Bind(t,MenuColor.Text);MenuTypography.Bind(t,MenuTextRole.Body);return t;
         }
         public static Button Button(Transform root,string title,Action click,TMP_FontAsset font,float height=56)
         {
             var rect=Rect(title,root,MenuTheme.Raised);var le=rect.gameObject.AddComponent<LayoutElement>();le.minHeight=le.preferredHeight=height;le.flexibleWidth=1;
             var button=rect.gameObject.AddComponent<Button>();button.targetGraphic=rect.GetComponent<Image>();
-            var text=Text(rect,title,font);text.alignment=TextAlignmentOptions.Center;Stretch(text.rectTransform,8);
+            var text=Text(rect,title,font);MenuTypography.Bind(text,MenuTextRole.Control);text.alignment=TextAlignmentOptions.Center;Stretch(text.rectTransform,8);
             if(click!=null)button.onClick.AddListener(()=>click());Style(button);return button;
         }
         public static void Style(Selectable selectable,bool primary=false,bool danger=false)
@@ -124,7 +124,7 @@ namespace Sekai.MenuUI
             wrapper.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             var accordion=wrapper.gameObject.AddComponent<Accordion>();accordion.transition=Accordion.Transition.Instant;
             var header=Rect("Header",wrapper,MenuTheme.Panel);var le=header.gameObject.AddComponent<LayoutElement>();le.minHeight=height;le.preferredHeight=height;
-            var label=Text(header,title,font,22);Stretch(label.rectTransform,8);
+            var label=Text(header,title,font,22);MenuTypography.Bind(label,MenuTextRole.Section);Stretch(label.rectTransform,8);
             var body=Rect("Body",wrapper);Vertical(body,8).padding=new RectOffset(8,8,4,12);
             var toggle=header.gameObject.AddComponent<AccordionElement>();toggle.group=null;toggle.targetGraphic=header.GetComponent<Image>();
             if(preference!=null&&PlayerPrefs.HasKey("MenuUI.fold."+preference))expanded=PlayerPrefs.GetInt("MenuUI.fold."+preference)==1;
@@ -216,7 +216,7 @@ namespace Sekai.MenuUI
                 MenuThemeBinding.Bind(buttons[i].image,selected?MenuColor.TabActive:MenuColor.TabBar);
                 var label=buttons[i].GetComponentInChildren<TMP_Text>(true);
                 MenuThemeBinding.Bind(label,selected?MenuColor.TabActiveInk:MenuColor.TabInactiveInk);
-                if(label!=null)label.fontStyle=selected?label.fontStyle|FontStyles.Bold:label.fontStyle&~FontStyles.Bold;
+                if(label!=null)MenuTypography.Bind(label,selected?MenuTextRole.SelectedTab:MenuTextRole.Control);
                 tabIndicators[i].SetActive(selected);
                 var shadow=buttons[i].GetComponent<Shadow>();if(shadow!=null)shadow.enabled=false;
             }

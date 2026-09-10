@@ -11,6 +11,9 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
     {
         public string id = Guid.NewGuid().ToString("N");
         public double seconds;
+        // Absolute audio end time from the aligner; zero in legacy sessions.
+        public double end;
+        public bool manuallyEdited;
         public string label = "";
         public bool used;
         public List<int> placedNoteIds = new List<int>();
@@ -58,6 +61,28 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
     }
     public static class AudioAssistAlgorithms
     {
+        public static bool HasSyllableEnd(AssistDraft point) => point.end > point.seconds && !double.IsNaN(point.end) && !double.IsInfinity(point.end);
+        public static double SyllableEnd(AssistDraft point, double nextStart, double duration)
+        {
+            double end = HasSyllableEnd(point) ? point.end :
+                (nextStart > point.seconds ? nextStart : point.seconds + .25);
+            return Math.Max(point.seconds, Math.Min(duration, end));
+        }
+        public static bool RestoreSyllableEnds(List<AssistLyric> lyrics, List<AssistLyric> cached)
+        {
+            if (cached == null) return false;
+            var points = cached.Where(l => l?.syllables != null).SelectMany(l => l.syllables)
+                .Where(p => p != null && HasSyllableEnd(p)).ToLookup(p => p.label);
+            bool changed = false;
+            foreach (var point in lyrics.SelectMany(l => l.syllables))
+            {
+                if (HasSyllableEnd(point)) continue;
+                var match = points[point.label].FirstOrDefault(p => Math.Abs(p.seconds - point.seconds) < .00001);
+                if (match == null) continue;
+                point.end = match.end;changed = true;
+            }
+            return changed;
+        }
         private static readonly Regex Stamp = new Regex(@"\[(\d+):(\d{2})(?:[.:](\d{1,3}))?\]", RegexOptions.Compiled);
         private static readonly Regex Syllable = new Regex(@"<(\d+):(\d{2})(?:[.:](\d{1,3}))?>", RegexOptions.Compiled);
         private static double Time(Match match)
@@ -86,7 +111,10 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                         int start = words[i].Index + words[i].Length;
                         int end = i + 1 < words.Count ? words[i + 1].Index : content.Length;
                         string word = content.Substring(start, end - start).Trim();
-                        if (word.Length > 0) lyric.syllables.Add(new AssistDraft { seconds = Time(words[i]) + offset + Time(stamp) - Time(stamps[0]), label = word });
+                        if (word.Length > 0) lyric.syllables.Add(new AssistDraft {
+                            seconds = Time(words[i]) + offset + Time(stamp) - Time(stamps[0]),
+                            end = i + 1 < words.Count ? Time(words[i + 1]) + offset + Time(stamp) - Time(stamps[0]) : 0,
+                            label = word });
                     }
                     if (!string.IsNullOrWhiteSpace(lyric.text)) result.Add(lyric);
                 }

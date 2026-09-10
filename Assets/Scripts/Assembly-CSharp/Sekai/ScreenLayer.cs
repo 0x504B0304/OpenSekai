@@ -147,6 +147,7 @@ namespace Sekai
 		{
 			state = State.InitComponent;
 			OnInitComponent();
+			Sekai.MenuUI.MenuTypography.BindTree(transform);
 		}
 
 		public void OnScreenLayerStart()
@@ -165,6 +166,7 @@ namespace Sekai
 			state = State.Playing;
 			OnFinishStartAnimation();
 			OnScreenStart();
+			Sekai.MenuUI.MenuTypography.BindTree(transform);
 		}
 
 		public virtual void OnWillExit()

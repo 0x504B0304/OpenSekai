@@ -22,14 +22,6 @@ namespace Sekai.CustomMusicScoreManager
 {
 	public sealed partial class ScreenLayerCustomMusicScoreManager : ScreenLayer
 	{
-		private const string BaseFontEbPath = "font/FOT-RodinNTLGPro-EB SDF_Base";
-
-		private const string DynamicFontEbPath = "font/FOT-RodinNTLGPro-EB SDF_Dynamic";
-
-		private const string BaseFontDbPath = "font/FOT-RodinNTLGPro-DB SDF_Base";
-
-		private const string DynamicFontDbPath = "font/FOT-RodinNTLGPro-DB SDF_Dynamic";
-
 		private const int MaxManifestFieldColumnCount = 3;
 
 		private const float ManifestFieldMinWidth = 300f;
@@ -114,12 +106,6 @@ namespace Sekai.CustomMusicScoreManager
 			"MASTER",
 			"APPEND"
 		};
-
-		private static TMP_FontAsset _baseFontEB;
-
-		private static TMP_FontAsset _baseFontDB;
-
-		private static bool _fontAssetSetup;
 
 		private readonly List<RowView> _rows = new List<RowView>();
 		private RectTransform _listContent;
@@ -821,6 +807,7 @@ namespace Sekai.CustomMusicScoreManager
 			fieldLayout.flexibleWidth = 1f;
 			_languageDropdownLabel = field.GetComponentInChildren<TextMeshProUGUI>();
 			_languageDropdownLabel.alignment = TextAlignmentOptions.Left;
+			SetStretchOffsets(_languageDropdownLabel.rectTransform, 24f, 0f, 24f, 0f);
 
 			_languageDropdownOptions = CreateRect("LanguageDropdownOptions", selector).gameObject;
 			LayoutElement optionsLayout = _languageDropdownOptions.AddComponent<LayoutElement>();
@@ -836,6 +823,11 @@ namespace Sekai.CustomMusicScoreManager
 			CreateButton("SimplifiedChinese", _languageDropdownOptions.transform, "简体中文", () => SetLanguage(LocalizationManager.SimplifiedChinese), 440f, 50f);
 			CreateButton("Japanese", _languageDropdownOptions.transform, "日本語", () => SetLanguage(LocalizationManager.Japanese), 440f, 50f);
 			CreateButton("English", _languageDropdownOptions.transform, "English", () => SetLanguage(LocalizationManager.English), 440f, 50f);
+			foreach (var option in _languageDropdownOptions.GetComponentsInChildren<TextMeshProUGUI>(true))
+			{
+				option.alignment = TextAlignmentOptions.Left;
+				SetStretchOffsets(option.rectTransform, 24f, 0f, 24f, 0f);
+			}
 			RefreshLanguageDropdownLabel();
 			SetLanguageDropdownExpanded(false);
 		}
@@ -2034,6 +2026,7 @@ namespace Sekai.CustomMusicScoreManager
 			button.onClick.AddListener(() => UpdateSelection(item));
 
 			TextMeshProUGUI title = CreateText("Title", rect, item.Entry.Manifest.title, 26, FontStyles.Bold, TextAlignmentOptions.Left);
+			MenuTypography.Bind(title,MenuTextRole.Section);
 			SetMenuLiteral(title,item.Entry.Manifest.title);
 			SetAnchor(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(22f, -14f), new Vector2(-44f, 36f));
 
@@ -3933,6 +3926,8 @@ namespace Sekai.CustomMusicScoreManager
 			tmp.text = text;
 			tmp.fontSize = fontSize;
 			tmp.fontStyle = style;
+			MenuTypography.Bind(tmp, name == "Title" || name == "DetailTitle" ? MenuTextRole.Title :
+				name == "ListTitle" ? MenuTextRole.Section : MenuTypography.Infer(tmp));
 			tmp.alignment = alignment;
 			tmp.color = (Color32)MenuTheme.Text;
 			tmp.textWrappingMode = TextWrappingModes.NoWrap;
@@ -3944,44 +3939,7 @@ namespace Sekai.CustomMusicScoreManager
 
 		private static TMP_FontAsset GetOriginalFontAsset(FontStyles style)
 		{
-			SetupOriginalFontAssets();
-			return (style & FontStyles.Bold) != 0 ? _baseFontEB : _baseFontDB;
-		}
-
-		private static void SetupOriginalFontAssets()
-		{
-			if (_fontAssetSetup)
-			{
-				return;
-			}
-
-			_baseFontEB = Resources.Load<TMP_FontAsset>(BaseFontEbPath);
-			_baseFontDB = Resources.Load<TMP_FontAsset>(BaseFontDbPath);
-			TMP_FontAsset dynamicFontEB = HighQualityDynamicFontProvider.Get(
-				Resources.Load<TMP_FontAsset>(DynamicFontEbPath));
-			TMP_FontAsset dynamicFontDB = HighQualityDynamicFontProvider.Get(
-				Resources.Load<TMP_FontAsset>(DynamicFontDbPath));
-			AddFallbackFontAsset(_baseFontEB, dynamicFontEB);
-			AddFallbackFontAsset(_baseFontDB, dynamicFontDB);
-			_fontAssetSetup = true;
-		}
-
-		private static void AddFallbackFontAsset(TMP_FontAsset fontAsset, TMP_FontAsset fallbackFontAsset)
-		{
-			if (fontAsset == null || fallbackFontAsset == null)
-			{
-				return;
-			}
-
-			if (fontAsset.fallbackFontAssetTable == null)
-			{
-				fontAsset.fallbackFontAssetTable = new List<TMP_FontAsset>();
-			}
-
-			if (!fontAsset.fallbackFontAssetTable.Contains(fallbackFontAsset))
-			{
-				fontAsset.fallbackFontAssetTable.Insert(0, fallbackFontAsset);
-			}
+			return MenuTypography.Get((style & FontStyles.Bold) != 0 ? MenuTextRole.Title : MenuTextRole.Body);
 		}
 
 		private static RectTransform CreateRect(string name, Transform parent)

@@ -52,6 +52,15 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		public bool IsSetupComplete => _isSetupComplete;
 
+		public void HandleHardwareBackKey()
+		{
+			if (!_isSetupComplete || _hasBootError) return;
+			if (AudioAssist.AudioAssistSyllableDialog.TryHandleBackKey()) return;
+			if (_MusicScoreMakerView?.TryExecuteBackKeyProcessOnOpenedSubWindow() == true) return;
+			if (MusicScoreMakerEventDispatcher.ExistsInstance)
+				MusicScoreMakerEventDispatcher.Instance.Publish(new BackKeyPressedEvent());
+		}
+
 		protected override void OnBoot(BootArgBase bootArg)
 		{
 			this.bootArg = bootArg as BootArg;

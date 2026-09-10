@@ -20,6 +20,25 @@ namespace Sekai
 
 		private static int currentPointSize = SamplingPointSize;
 
+		private static readonly Dictionary<Font, TMP_FontAsset> SourceFonts = new Dictionary<Font, TMP_FontAsset>();
+
+		// Menu fonts own their native metrics and never borrow the gameplay atlases.
+		public static TMP_FontAsset GetFromSource(Font source)
+		{
+			if (source == null) return null;
+			if (SourceFonts.TryGetValue(source, out var cached) && cached != null) return cached;
+			var font = TMP_FontAsset.CreateFontAsset(source, currentPointSize, AtlasPadding,
+				UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA, AtlasSize, AtlasSize,
+				AtlasPopulationMode.Dynamic, true);
+			font.name = source.name + " Menu SDF";
+			font.hideFlags = HideFlags.HideAndDontSave;
+			font.material.hideFlags = HideFlags.HideAndDontSave;
+			foreach (var atlas in font.atlasTextures) atlas.hideFlags = HideFlags.HideAndDontSave;
+			SourceFonts[source] = font;
+			RuntimeFontAssets[font] = font;
+			return font;
+		}
+
 		public static int CalculateSamplingPointSize(float dpiScale, int width, int height)
 		{
 			float renderScale = Mathf.Min(width / 1920f, height / 1080f);

@@ -396,6 +396,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			float maximumLocalWidth = Mathf.Max(1, _originalSize.x + notes.rect.width - preview.rect.width);
 			float maximumWidth = canvasRect.InverseTransformVector(preview.TransformVector(new Vector3(maximumLocalWidth, 0, 0))).x;
 			float width = Mathf.Min(nativeWidth, maximumWidth, right - left);
+			float noteScaleMultiplier = maximumWidth > Mathf.Epsilon ? Mathf.Clamp01(width / maximumWidth) : 1f;
+			_musicScorePreview.SetEditorNoteScaleMultiplier(noteScaleMultiplier);
 			float center = Mathf.Clamp(canvasRect.rect.center.x, left + width * .5f, right - width * .5f);
 			float localDelta = preview.InverseTransformVector(canvasRect.TransformVector(new Vector3(width - nativeWidth, 0, 0))).x;
 			preview.SetSizeWithCurrentAnchors(UnityEngine.RectTransform.Axis.Horizontal, preview.rect.width + localDelta);

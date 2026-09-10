@@ -102,6 +102,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		private double _wheelScrollRemainderTicks;
 
+		private float _editorNoteScaleMultiplier = 1f;
+
 		private CancellationTokenSource _cancellationTokenSource;
 
 		public RectTransform NotesViewRectTransform
@@ -155,6 +157,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		public void Setup(int notePoolCount = 50, int linePoolCount = 10)
 		{
 			_notesView.Setup(notePoolCount, linePoolCount);
+			_notesView.SetNoteScaleMultiplier(_editorNoteScaleMultiplier);
 			_musicScoreEventsView.Setup();
 			if (_minimapView != null)
 			{
@@ -165,6 +168,18 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			SetupEventDispatcher();
 			toolInputHandler.RemoveAllAndAddListener(OnClick, null, OnDrag, OnPointerDown, OnPointerUp, OnPinch);
 			UpdateSubWindowCache();
+		}
+
+		public void SetEditorNoteScaleMultiplier(float multiplier)
+		{
+			float clampedMultiplier = Mathf.Clamp01(multiplier);
+			if (Mathf.Approximately(_editorNoteScaleMultiplier, clampedMultiplier))
+			{
+				return;
+			}
+
+			_editorNoteScaleMultiplier = clampedMultiplier;
+			_notesView?.SetNoteScaleMultiplier(_editorNoteScaleMultiplier);
 		}
 
 		public void SetMinimapAudioSamples(float[] samples, long totalTicks, long fillerTicks)
@@ -179,6 +194,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			DisposeEventDispatcher();
 			_notesView.Dispose();
+			_editorNoteScaleMultiplier = 1f;
 			_musicScoreEventsView.Dispose();
 			if (_minimapView != null)
 			{
@@ -634,7 +650,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			{
 				_cachedNoteInstanceRect = _notesView.GetNoteInstanceRectTransform();
 			}
-			return _cachedNoteInstanceRect != null ? _cachedNoteInstanceRect.rect.height * 0.5f : 15f;
+			return _cachedNoteInstanceRect != null
+				? _cachedNoteInstanceRect.rect.height * _editorNoteScaleMultiplier * 0.5f
+				: 15f * _editorNoteScaleMultiplier;
 		}
 
 		private static void EncapsulateBounds(ref bool hasBounds, ref float minX, ref float minY, ref float maxX, ref float maxY, float centerX, float centerY, float halfWidth, float halfHeight)

@@ -32,7 +32,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public static bool Available => (Application.platform == RuntimePlatform.WindowsPlayer || Application.platform == RuntimePlatform.WindowsEditor)
             && File.Exists(Path.Combine(BundleDirectory,"manifest.json"))
             && File.Exists(Path.Combine(BundleDirectory,"runtime","python.exe"));
-        public static async Task<AssistAnalysisOutput> Run(string audio, string lrc, string directory, string language, double offset, Action<string> progress, CancellationToken token)
+        public static async Task<AssistAnalysisOutput> Run(string audio, string lrc, string directory, string language, double offset, Action<string, float> progress, CancellationToken token)
         {
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
             string bundle = BundleDirectory;
@@ -60,7 +60,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 while(!process.HasExited)
                 {
                     token.ThrowIfCancellationRequested();
-                    if(File.Exists(status))try{var value=JsonUtility.FromJson<Progress>(File.ReadAllText(status));progress(value.message+" "+Mathf.RoundToInt(value.progress*100)+"%");}catch(IOException){}
+                    if(File.Exists(status))try{var value=JsonUtility.FromJson<Progress>(File.ReadAllText(status));if(value!=null)progress(value.message,Mathf.Clamp01(value.progress));}catch(IOException){}
                     await Task.Delay(250,token);
                 }
                 token.ThrowIfCancellationRequested();

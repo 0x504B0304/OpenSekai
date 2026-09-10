@@ -754,6 +754,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			text.font = _font; text.fontSize = size; text.color = Color.white; text.alignment = alignment; text.textWrappingMode = TextWrappingModes.Normal; text.text = localized ? LocalizationManager.Get(textOrKey) : textOrKey;
 			if (height > 0) go.AddComponent<LayoutElement>().preferredHeight = height;
 			if (localized) go.AddComponent<LocalizedTextBinding>().Key = textOrKey;
+			Sekai.MenuUI.MenuTypography.Bind(text, size >= 30 ? Sekai.MenuUI.MenuTextRole.Title : Sekai.MenuUI.MenuTypography.Infer(text));
 			return text;
 		}
 
@@ -787,6 +788,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			hint.rectTransform.anchorMin = Vector2.zero; hint.rectTransform.anchorMax = Vector2.one; hint.rectTransform.offsetMin = new Vector2(10, 4); hint.rectTransform.offsetMax = new Vector2(-10, -4);
 			if (localizedPlaceholder) hint.gameObject.AddComponent<LocalizedTextBinding>().Key = placeholder;
 			TMP_InputField input = root.AddComponent<TMP_InputField>(); input.textComponent = text; input.placeholder = hasInitialValue ? null : hint; input.lineType = multiline ? TMP_InputField.LineType.MultiLineNewline : TMP_InputField.LineType.SingleLine; input.text = value;
+			Sekai.MenuUI.MenuTypography.Bind(text,Sekai.MenuUI.MenuTextRole.Body);
+			Sekai.MenuUI.MenuTypography.Bind(hint,Sekai.MenuUI.MenuTextRole.Caption);
 			return input;
 		}
 

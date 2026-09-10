@@ -113,8 +113,9 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 		}
 
-		private bool CanHandlePlayPauseShortcut()
-		{
+        private bool CanHandlePlayPauseShortcut()
+        {
+            if(AudioAssist.AudioAssistSyllableDialog.IsOpen)return false;
 			if (_playButton == null || !_playButton.isActiveAndEnabled || !_playButton.interactable)
 			{
 				return false;

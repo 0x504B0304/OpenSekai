@@ -24,6 +24,9 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private float layoutScale;
         private readonly List<(TMP_Text text,float size)> labels=new List<(TMP_Text,float)>();
         private TMP_Text status, inspector;
+        private Button analysisButton, cancelAnalysis, analysisLanguage;
+        private Image analysisFill;
+        private TMP_Text analysisLabel;
         private Button leftEntry;
         private EditorActionDock dock;
         private AudioAssistFoldArrowGraphic leftArrow;
@@ -37,6 +40,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             public RectTransform root;
             public AudioAssistWaveform wave;
+            public AudioAssistLyricOverlay syllables;
             public TMP_Text title;
             public AudioAssistSplitter splitter;
             public float preferred, actual;
@@ -66,8 +70,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             owner = controller;canvas = GetComponentInParent<Canvas>();if(canvas==null)return;
             canvasRect = (RectTransform)canvas.transform;font=GetComponentInChildren<TMP_Text>(true)?.font;
-            var cjk=Resources.Load<Font>("Fonts/NotoSansCJKsc-Regular");
-            if(cjk!=null){font=TMP_FontAsset.CreateFontAsset(cjk,90,9,UnityEngine.TextCore.LowLevel.GlyphRenderMode.SDFAA,2048,2048,AtlasPopulationMode.Dynamic,true);ownsFont=true;}
+            font=MenuTypography.Get();ownsFont=false;
             layoutScale=canvas.scaleFactor;
             buttonHeight=Math.Max(58,44/Math.Max(.25f,canvas.scaleFactor));
             if (tools != null) foreach(string name in new[]{"List","UndoRedo","UIPartsToggle","EditRestrictedToggleButton"})
@@ -122,22 +125,32 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             lyricOffset=Number(lrcGroup,"歌词整体偏移（秒）",owner.State.lyricOffset,value=>{owner.State.lyricOffset=value;owner.Save();});
             Label(lrcGroup,"普通 LRC 按句；自动对齐或增强 LRC 可逐音节试听。",17,80);
             var lyricNavigation=Row(lrcGroup);
-            Button(lyricNavigation,"上一句",()=>{lyricPage=Math.Max(0,lyricPage-1);lyricSignature=null;Refresh();});
-            Button(lyricNavigation,"下一句",()=>{lyricPage=Math.Min(owner.State.lyrics.Count-1,lyricPage+1);lyricSignature=null;Refresh();});
+            Button(lyricNavigation,"上一句",()=>FocusLyric(lyricPage-1));
+            Button(lyricNavigation,"下一句",()=>FocusLyric(lyricPage+1));
             Button(lrcGroup,"当前附近歌词",()=>{lyricPage=Math.Max(0,owner.State.lyrics.FindLastIndex(l=>l.seconds+owner.State.lyricOffset<=owner.SelectedSeconds));lyricSignature=null;Refresh();});
             lyrics=Container(lrcGroup);
             var analysis=Fold(content,"内置自动分析");
             var languageButton=Button(analysis,"语言：日语",()=>{});
+            analysisLanguage=languageButton;
             languageButton.onClick.AddListener(()=>{language=(language+1)%3;languageButton.GetComponentInChildren<TMP_Text>().text="语言："+new[]{"日语","中文","英语（词）"}[language];});
-            Button(analysis,"分轨并对齐歌词",()=>owner.AnalyzeLocal(new[]{"ja","zh","en"}[language]));
-            Button(analysis,"取消处理",owner.Cancel);
+            analysisButton=Button(analysis,"分轨并对齐歌词",()=>owner.AnalyzeLocal(new[]{"ja","zh","en"}[language]));
+            analysisButton.transition=Selectable.Transition.None;
+            analysisButton.gameObject.AddComponent<Mask>().showMaskGraphic=true;
+            analysisLabel=analysisButton.GetComponentInChildren<TMP_Text>();
+            analysisLabel.enableAutoSizing=true;analysisLabel.fontSizeMin=16;analysisLabel.fontSizeMax=23;
+            var fillRect=Rect("AnalysisProgress",analysisButton.transform,Color.clear);
+            fillRect.anchorMin=Vector2.zero;fillRect.anchorMax=Vector2.one;fillRect.offsetMin=fillRect.offsetMax=Vector2.zero;
+            fillRect.gameObject.AddComponent<LayoutElement>().ignoreLayout=true;
+            analysisFill=fillRect.GetComponent<Image>();analysisFill.raycastTarget=false;
+            analysisLabel.transform.SetAsLastSibling();
+            cancelAnalysis=Button(analysis,"取消处理",owner.Cancel);
             Label(analysis,"Windows 版自带模型，原曲自动分轨，无需安装或联网。唱歌对齐仍需试听核对。",17,90);
             var marks=Section(content,"起音与标记");
             inspector=Label(marks,"点击波形定位",21,90);
             Switch(marks,"起音提示",()=>owner.ShowOnsets,()=>{owner.ShowOnsets=!owner.ShowOnsets;Refresh();});
             Label(marks,"提示灵敏度",18,36);Slider(marks,owner.State.sensitivity,v=>{owner.State.sensitivity=v;Refresh();});
             Button(marks,"试听附近",()=>owner.Audition(owner.SelectedSeconds-.3,owner.SelectedSeconds+.6,false));
-            Button(marks,"＋ 采音草稿",()=>owner.AddDraft(owner.SelectedSeconds));
+            Button(marks,"＋ 采音草稿",()=>owner.AddDraft(owner.SelectedSeconds,owner.SelectedSyllable?.label??""));
             var zoom=Row(marks);Button(zoom,"缩小",()=>MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomOutTimelineEvent()));Button(zoom,"放大",()=>MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomInTimelineEvent()));
             var loop=Section(content,"试听与循环",true);
             loopRange=MenuControls.Range(loop,font,buttonHeight,(a,b)=>{if(refreshing)return;owner.Presenter.PauseAssist();owner.State.loopA=Math.Min(a,Math.Max(0,b-.15));owner.State.loopB=Math.Min(owner.Transport.Duration,Math.Max(b,owner.State.loopA+.15));owner.Save();});
@@ -290,6 +303,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 // without exceeding UGUI's vertex limit when all six are visible.
                 var wr=lane.wave.rectTransform;wr.anchorMin=new Vector2(0,.5f);wr.anchorMax=new Vector2(1,.5f);
                 wr.sizeDelta=new Vector2(0,top.y-bottom.y);wr.anchoredPosition=new Vector2(0,(bottom.y+top.y)*.5f-center);
+                if(lane.syllables!=null)lane.syllables.RefreshLayout();
                 var separator=lane.splitter.rectTransform;
                 separator.anchorMin=new Vector2(0,0);separator.anchorMax=new Vector2(0,1);separator.pivot=new Vector2(.5f,.5f);
                 separator.sizeDelta=new Vector2(44/Math.Max(.1f,canvas.scaleFactor),0);separator.anchoredPosition=new Vector2(laneLeft,0);
@@ -320,6 +334,11 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 lane.root=(RectTransform)go.transform;go.AddComponent<RectMask2D>();
                 var graph=new GameObject("Waveform_"+key,typeof(RectTransform));graph.transform.SetParent(go.transform,false);
                 lane.wave=graph.AddComponent<AudioAssistWaveform>();lane.wave.Controller=owner;lane.wave.StemKey=key;
+                if(key=="vocals")
+                {
+                    lane.syllables=graph.AddComponent<AudioAssistLyricOverlay>();
+                    lane.syllables.Build(owner,lane.wave,font);lane.wave.Lyrics=lane.syllables;
+                }
                 var titleBack=Rect("StemHeader",go.transform,PanelColor);titleBack.GetComponent<Image>().raycastTarget=false;
                 titleBack.anchorMin=new Vector2(0,1);titleBack.anchorMax=Vector2.one;titleBack.pivot=new Vector2(.5f,1);
                 titleBack.sizeDelta=new Vector2(0,44);titleBack.anchoredPosition=Vector2.zero;
@@ -328,7 +347,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 lane.title.alignment=TextAlignmentOptions.Center;lane.title.textWrappingMode=TextWrappingModes.NoWrap;lane.title.overflowMode=TextOverflowModes.Ellipsis;
                 lane.title.rectTransform.anchorMin=Vector2.zero;lane.title.rectTransform.anchorMax=Vector2.one;
                 lane.title.rectTransform.offsetMin=new Vector2(6,0);lane.title.rectTransform.offsetMax=new Vector2(-6,0);
-                float stored=PlayerPrefs.GetFloat("MenuUI.waveWidth."+key,110);
+                float stored=PlayerPrefs.GetFloat("MenuUI.waveWidth."+key,key=="vocals"?190:110);
                 lane.preferred=float.IsNaN(stored)||float.IsInfinity(stored)?110:Mathf.Clamp(stored,64,500);
                 var divider=new GameObject("WaveDivider_"+key,typeof(RectTransform));divider.transform.SetParent(root,false);
                 lane.splitter=divider.AddComponent<AudioAssistSplitter>();
@@ -372,6 +391,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             try
             {
                 status.text=owner.Status;
+                RefreshAnalysisButton();
                 rates.SetWithoutNotify(owner.Transport.Rate==1?0:owner.Transport.Rate==.75f?1:2);
                 if(loopRange!=null)loopRange.SetWithoutNotify((float)owner.Transport.Duration,(float)owner.State.loopA,(float)owner.State.loopB);
                 foreach(var pair in stems){var state=owner.State.stems.First(s=>s.key==pair.Key);bool ready=owner.Transport.Tracks.ContainsKey(pair.Key);pair.Value.interactable=ready;PaintStem(pair.Value,pair.Key,state.enabled&&ready);}
@@ -382,12 +402,26 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 if(!lyricOffset.isFocused)lyricOffset.SetTextWithoutNotify(owner.State.lyricOffset.ToString("0.000",CultureInfo.InvariantCulture));
                 long ticks=owner.Presenter.AssistTicks(owner.SelectedSeconds);long snapped=MusicScoreMakerUtility.CalculateSnapQuantizedTicks(0,ticks);
                 inspector.text=Format(owner.SelectedSeconds)+"\n距拍线 "+((owner.SelectedSeconds-owner.Presenter.AssistSeconds(snapped))*1000).ToString("+0.0;-0.0;0",CultureInfo.InvariantCulture)+" ms";
+                if(owner.SelectedSyllable!=null)
+                {
+                    var point=owner.SelectedSyllable;
+                    inspector.text=point.label+"  "+Format(point.seconds+owner.State.lyricOffset)+"\n"+
+                        ((owner.SelectedSyllableEnd-point.seconds)*1000).ToString("0",CultureInfo.InvariantCulture)+" ms"+
+                        (point.manuallyEdited?" · 人工调整":!AudioAssistAlgorithms.HasSyllableEnd(point)?" · 时长估算":point.confidence<.45f?" · 待核对":"");
+                }
                 SyncWaveLanes();
                 RebuildDrafts();RebuildLyrics();foreach(var lane in waveLanes.Values)lane.wave.SetVerticesDirty();
             }
             finally{refreshing=false;}
         }
         private string draftSignature,lyricSignature;
+        private void FocusLyric(int index)
+        {
+            if(owner.State.lyrics.Count==0)return;
+            lyricPage=Mathf.Clamp(index,0,owner.State.lyrics.Count-1);lyricSignature=null;
+            if(owner.Transport.Tracks.ContainsKey("vocals")&&!owner.Visible.Contains("vocals"))owner.Visible.Add("vocals");
+            owner.SetPoint(owner.State.lyrics[lyricPage].seconds+owner.State.lyricOffset);
+        }
         private void RebuildDrafts()
         {
             string signature=string.Join("|",owner.State.drafts.Select(d=>d.id+d.seconds+d.used))+(owner.SelectedDraft?.id??"");if(signature==draftSignature)return;draftSignature=signature;
@@ -412,16 +446,34 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 Label(lyrics,Format(t)+" "+line.text,19,70);
                 var row=Row(lyrics);Button(row,"试听",()=>owner.Audition(t-.15,t+Math.Max(.6,NextLyricTime(lyric)-lyric.seconds),false));
                 Button(row,"＋ 草稿",()=>owner.AddDrafts(lyric.syllables.Count>0?lyric.syllables.Select(s=>new AssistDraft{seconds=s.seconds+owner.State.lyricOffset,label=s.label,confidence=s.confidence}):new[]{new AssistDraft{seconds=t,label=lyric.text}}));
-                foreach(var word in line.syllables)
-                {
-                    var point=word;double next=line.syllables.SkipWhile(s=>s!=point).Skip(1).Select(s=>s.seconds).DefaultIfEmpty(point.seconds+.25).First();
-                    Button(lyrics,point.label+" "+Format(point.seconds+owner.State.lyricOffset)+(point.confidence<.45f?" 待核对":""),()=>{owner.SetPoint(point.seconds+owner.State.lyricOffset);owner.Audition(point.seconds+owner.State.lyricOffset-.025,next+owner.State.lyricOffset,false);});
-                }
+                Label(lyrics,line.syllables.Count>0?"点击人声音节试听；右键或长按修改文字、起止时间或删除。":"此句只有整句时间；对齐后显示音节标签。",17,80);
             }
+        }
+        private void RefreshAnalysisButton()
+        {
+            bool running=owner.AnalysisStatus==AssistAnalysisStatus.Running;
+            analysisButton.interactable=!owner.Busy;analysisLanguage.interactable=!owner.Busy;
+            cancelAnalysis.gameObject.SetActive(running);cancelAnalysis.interactable=owner.Busy;
+            analysisFill.gameObject.SetActive(owner.AnalysisStatus!=AssistAnalysisStatus.Idle);
+            var binding=analysisFill.GetComponent<MenuThemeBinding>();if(binding!=null)binding.enabled=false;
+            analysisFill.color=Color.Lerp(MenuTheme.ButtonFace,owner.AnalysisStatus==AssistAnalysisStatus.Failed?MenuTheme.Danger:MenuTheme.Accent,.32f);
+            analysisFill.rectTransform.anchorMax=new Vector2(owner.AnalysisProgress,1);
+            analysisFill.rectTransform.offsetMin=analysisFill.rectTransform.offsetMax=Vector2.zero;
+            analysisLabel.fontSizeMin=12/Math.Max(.1f,canvas.scaleFactor);
+            analysisLabel.fontSizeMax=Math.Max(23,analysisLabel.fontSizeMin);
+            if(running)
+            {
+                string stage=owner.AnalysisStage.Replace("正在分离人声、鼓组、贝斯和旋律","正在分轨").Replace("载入内置多语言逐音节对齐模型","载入音节对齐模型").Replace("载入内置 Demucs 分轨模型","载入分轨模型");
+                analysisLabel.text=stage+"\n"+Mathf.FloorToInt(owner.AnalysisProgress*100)+"%";
+            }
+            else analysisLabel.text=owner.AnalysisStatus==AssistAnalysisStatus.Completed?"✓ 分析完成 100% · 重新处理":
+                owner.AnalysisStatus==AssistAnalysisStatus.Canceled?"已取消 · 点击重新处理":
+                owner.AnalysisStatus==AssistAnalysisStatus.Failed?"处理失败 · 点击重试":"分轨并对齐歌词";
         }
         private double NextLyricTime(AssistLyric line)=>owner.State.lyrics.SkipWhile(l=>l!=line).Skip(1).Select(l=>l.seconds).DefaultIfEmpty(Math.Min(line.seconds+5,owner.Transport.Duration)).First();
         public void Dispose()
         {
+            AudioAssistSyllableDialog.CloseFor(owner);
             if(owner!=null)owner.Changed-=Refresh;
             if(root!=null)Destroy(root.gameObject);if(dock!=null)dock.Dispose();if(leftEntry!=null)Destroy(leftEntry.gameObject);
             foreach(var tool in leftTools)if(tool!=null)tool.SetActive(true);
@@ -450,6 +502,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             var go=new GameObject("Label",typeof(RectTransform));go.transform.SetParent(parent,false);
             var label=go.AddComponent<TextMeshProUGUI>();if(font!=null)label.font=font;label.text=text;label.fontSize=Math.Max(size,12/Math.Max(.1f,canvas.scaleFactor));label.color=MenuTheme.Text;MenuThemeBinding.Bind(label,MenuColor.Text);label.raycastTarget=false;label.textWrappingMode=TextWrappingModes.Normal;label.alignment=TextAlignmentOptions.MidlineLeft;
+            MenuTypography.Bind(label, size >= 28 ? MenuTextRole.Title : MenuTypography.Infer(label));
             labels.Add((label,size));
             var element=go.AddComponent<LayoutElement>();element.minHeight=height;element.flexibleWidth=1;return label;
         }
@@ -466,6 +519,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             Label(parent,caption,18,36);var rect=Rect("Input_"+caption,parent,MenuTheme.Raised);MenuThemeBinding.Bind(rect.GetComponent<Image>(),MenuColor.Raised);rect.gameObject.AddComponent<LayoutElement>().preferredHeight=buttonHeight;
             var input=rect.gameObject.AddComponent<TMP_InputField>();var text=Label(rect,value.ToString("0.###",CultureInfo.InvariantCulture),23,buttonHeight);
+            MenuTypography.Bind(text,MenuTextRole.Numeric);
             text.rectTransform.anchorMin=Vector2.zero;text.rectTransform.anchorMax=Vector2.one;text.rectTransform.offsetMin=new Vector2(10,0);text.rectTransform.offsetMax=new Vector2(-10,0);input.targetGraphic=rect.GetComponent<Image>();input.textViewport=rect;input.textComponent=text;input.contentType=TMP_InputField.ContentType.DecimalNumber;input.SetTextWithoutNotify(value.ToString("0.###",CultureInfo.InvariantCulture));
             input.onEndEdit.AddListener(v=>{if(TryNumber(v,out var number))changed(number);else {owner.Status="请输入有效数字";Refresh();}});return input;
         }

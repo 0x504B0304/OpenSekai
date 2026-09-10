@@ -117,7 +117,12 @@ namespace Sekai.CustomMusicScoreManager
                 }
             }
             foreach(var button in scroll.content.GetComponentsInChildren<Button>(true))
-                if(button.GetComponentInParent<MenuSegments>(true)==null)MenuThemeBinding.Bind(button.image,MenuColor.TabField);
+                if(button.GetComponentInParent<MenuSegments>(true)==null)
+                {
+                    MenuThemeBinding.Bind(button.image,MenuColor.TabField);
+                    foreach(var label in button.GetComponentsInChildren<TMP_Text>(true))
+                        MenuThemeBinding.Bind(label,MenuColor.TabFieldInk);
+                }
         }
         private static void SetMenuLiteral(TMP_Text label,string value)
         {
@@ -135,6 +140,7 @@ namespace Sekai.CustomMusicScoreManager
         private void OnDestroy(){MenuTheme.Changed-=RefreshMenuTheme;}
         private void AddMenuSlider(TMP_InputField input,float min,float max)
         {
+            MenuTypography.Bind(input.textComponent,MenuTextRole.Numeric);
             var field=(RectTransform)input.transform;var root=(RectTransform)field.parent;
             var vertical=root.GetComponent<VerticalLayoutGroup>();vertical.enabled=false;
             var slider=MenuControls.Slider(root,min,max,min,v=>input.SetTextWithoutNotify(v.ToString("0.##",CultureInfo.InvariantCulture)),56);

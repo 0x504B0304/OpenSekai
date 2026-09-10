@@ -31,7 +31,7 @@ namespace Sekai.CustomMusicScoreManager
 
 		private void Build()
 		{
-			font = HighQualityDynamicFontProvider.Get(Resources.Load<TMP_FontAsset>("font/FOT-RodinNTLGPro-DB SDF_Dynamic"));
+			font = Sekai.MenuUI.MenuTypography.Get();
 			var background = Rect("Background", transform, Vector2.zero, Vector2.zero);
 			background.anchorMin = Vector2.zero; background.anchorMax = Vector2.one;
 			background.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, 0.7f);
@@ -84,6 +84,7 @@ namespace Sekai.CustomMusicScoreManager
 		{
 			var text = Rect(name, parent, size, position).gameObject.AddComponent<TextMeshProUGUI>();
 			text.font = font; text.fontSize = pointSize; text.color = Color.white;
+			Sekai.MenuUI.MenuTypography.Bind(text,Sekai.MenuUI.MenuTypography.Infer(text));
 			text.alignment = TextAlignmentOptions.Center;
 			text.textWrappingMode = TextWrappingModes.Normal;
 			text.overflowMode = TextOverflowModes.Overflow;

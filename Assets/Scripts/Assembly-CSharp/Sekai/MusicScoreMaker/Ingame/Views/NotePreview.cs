@@ -214,7 +214,14 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		public void SetNoteScaleMultiplier(float multiplier)
 		{
+			if (Mathf.Approximately(_noteScaleMultiplier, multiplier))
+			{
+				return;
+			}
+
 			_noteScaleMultiplier = multiplier;
+			_cachedSetRectWidth = float.NaN;
+			_cachedYScale = float.NaN;
 		}
 
 		public void SetInteractive(bool isInteractive)

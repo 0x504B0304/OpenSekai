@@ -8,10 +8,11 @@ using UnityEngine.UI;
 namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
 {
     [RequireComponent(typeof(CanvasRenderer))]
-    public sealed class AudioAssistWaveform : MaskableGraphic, IPointerDownHandler, IPointerUpHandler, IDragHandler, IScrollHandler
+    public sealed class AudioAssistWaveform : MaskableGraphic, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler, IDragHandler, IScrollHandler
     {
         public AudioAssistController Controller;
         public string StemKey;
+        public AudioAssistLyricOverlay Lyrics;
         private long start, end;
         private Vector2 press;
         private double pressSeconds, dragSeconds;
@@ -19,24 +20,44 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private string handle;
         private bool moved;
         private int? pointer;
+        private AssistDraft longPressPoint;
+        private double longPressEnd, pressTime;
+        private Vector2 pressScreen;
         private double[] edgeTimes = Array.Empty<double>();
         private float lastPixelHeight;
         private float Width => rectTransform.rect.width;
         private float Height => rectTransform.rect.height;
-        private double AtY(float y)
+        public double SecondsAtY(float y)
         {
+            start=MusicScoreMakerUtility.GetPreviewStartTicks();end=MusicScoreMakerUtility.GetPreviewEndTicks();
             long tick = start + (long)((y / Height + .5) * (end - start));
             return Controller.Presenter.AssistSeconds(tick);
         }
+        private double AtY(float y) => SecondsAtY(y);
+        public float PositionY(double seconds) => MusicScoreMakerUtility.CalcPreviewPositionYFromTicks(MusicScoreMakerUtility.GetPreviewStartTicks(), MusicScoreMakerUtility.GetPreviewEndTicks(), rectTransform.rect.size, Vector2.zero, Controller.Presenter.AssistTicks(seconds));
         private float Y(double seconds) => MusicScoreMakerUtility.CalcPreviewPositionYFromTicks(start, end, rectTransform.rect.size, Vector2.zero, Controller.Presenter.AssistTicks(seconds));
         private void Update()
         {
             if (Controller == null) return;
+            UpdateLongPress(Time.unscaledTimeAsDouble,Application.isFocused,UnityEngine.Input.touchCount);
             long s = MusicScoreMakerUtility.GetPreviewStartTicks(), e = MusicScoreMakerUtility.GetPreviewEndTicks();
             float pixels = canvas != null ? canvas.pixelRect.height : 0;
             if (s != start || e != end || pixels != lastPixelHeight || Controller.Transport.Playing) SetVerticesDirty();
             lastPixelHeight = pixels;
             start = s;end = e;
+        }
+        private void UpdateLongPress(double now,bool focused,int touches)
+        {
+            if(longPressPoint!=null&&pointer.HasValue&&!moved)
+            {
+                if(Controller.Busy||!focused||touches>1)longPressPoint=null;
+                else if(now-pressTime>=.55)
+                {
+                    var point=longPressPoint;double endTime=longPressEnd;
+                    longPressPoint=null;pointer=null;dragged=null;handle=null;
+                    Lyrics.Edit(point,endTime);
+                }
+            }
         }
         protected override void OnPopulateMesh(VertexHelper vh)
         {
@@ -64,7 +85,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             for (int column = 0; column < keys.Count; column++)
             {
                 var track = Controller.Transport.Tracks[keys[column]];var analysis = track.analysis;
-                float w = Width / keys.Count, center = left + (column + .5f) * w;
+                float w = (Width-(Lyrics!=null?Lyrics.LabelWidth:0)) / keys.Count, center = left + (column + .5f) * w;
                 Color color = AudioAssistStemColors.For(keys[column]);color.a=.8f;
                 Quad(vh, center, bottom, 1, Height, new Color(1,1,1,.08f));
                 if (analysis?.waveform == null) continue;
@@ -90,7 +111,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 {
                     double t = inspected.analysis.onsets[i] + inspected.state.offset;
                     if (t < min || t > max || inspected.analysis.strengths[i] < 1 - Controller.State.sensitivity) continue;
-                    Quad(vh, Width / 2 - 25, Y(t) - 1, 23, 2, new Color(1,.82f,.35f));
+                    Quad(vh, Width / 2 - (Lyrics!=null?Lyrics.LabelWidth:0) - 25, Y(t) - 1, 23, 2, new Color(1,.82f,.35f));
                 }
             }
             foreach (var draft in Controller.State.drafts)
@@ -120,10 +141,22 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private Vector2 Local(PointerEventData e) { RectTransformUtility.ScreenPointToLocalPointInRectangle(rectTransform,e.position,e.pressEventCamera,out var p);return p; }
         public void OnPointerDown(PointerEventData e)
         {
-            if (e.button != PointerEventData.InputButton.Left || Controller.Busy || pointer.HasValue) return;
+            if(Controller.Busy||AudioAssistSyllableDialog.IsOpen)return;
+            if(pointer.HasValue){longPressPoint=null;return;}
+            if(e.button==PointerEventData.InputButton.Right)
+            {
+                if(Lyrics!=null&&Lyrics.TryGetPoint(Local(e),out var point,out var endTime))Lyrics.Edit(point,endTime);
+                return;
+            }
+            if(e.button!=PointerEventData.InputButton.Left)return;
             pointer=e.pointerId;
+            pressScreen=e.position;pressTime=Time.unscaledTimeAsDouble;longPressPoint=null;
             if(!string.IsNullOrEmpty(StemKey))Controller.InspectedStem=StemKey;
             Controller.Presenter.PauseAssist();press = Local(e);pressSeconds = AtY(press.y);moved = false;dragged = null;handle = null;
+            if(Lyrics!=null&&Lyrics.HasLabels&&press.x>Width/2-Lyrics.LabelWidth)
+            {
+                Lyrics.TryGetPoint(press,out longPressPoint,out longPressEnd);return;
+            }
             float hit=22/Math.Max(.1f,canvas.scaleFactor);
             if (press.x < -Width/2 + hit*2) dragged = Controller.State.drafts.Where(d => !d.used && Math.Abs(Y(d.seconds)-press.y)<hit).OrderBy(d=>Math.Abs(Y(d.seconds)-press.y)).FirstOrDefault();
             if (dragged != null) { Controller.SelectedDraft = dragged;return; }
@@ -137,6 +170,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public void OnDrag(PointerEventData e)
         {
             if (Controller.Busy || pointer!=e.pointerId) return;Vector2 p = Local(e);moved |= Vector2.Distance(p,press)>4;
+            if(moved||Vector2.Distance(e.position,pressScreen)>8)longPressPoint=null;
             if (!moved) return;dragSeconds=Math.Max(Controller.Presenter.Model.FillerSec,Math.Min(Controller.Transport.Duration,AtY(p.y)));
             if (dragged == null)
             {
@@ -154,12 +188,13 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public void OnPointerUp(PointerEventData e)
         {
             if (pointer!=e.pointerId) return;
-            pointer=null;
+            pointer=null;longPressPoint=null;
             if (Controller.Busy) { dragged=null;handle=null;return; }
             if (moved && dragged != null) Controller.EditDraft(dragged,dragSeconds);
             else if (moved && handle!=null) { Controller.State.loop=Controller.State.loopB-Controller.State.loopA>=.15;Controller.Save(); }
             else if (!moved)
             {
+                if(Lyrics!=null&&Lyrics.TrySelect(Local(e))){dragged=null;handle=null;return;}
                 double t = AtY(Local(e).y);
                 if (dragged != null) { Controller.SelectedSeconds=dragged.seconds;Controller.Presenter.SeekAssist(dragged.seconds);Controller.Refresh(); }
                 else
@@ -180,7 +215,8 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             }
             dragged=null;handle=null;SetVerticesDirty();
         }
-        public void OnScroll(PointerEventData e) => Controller.View.OnScroll(e);
-        protected override void OnDisable() { pointer=null;dragged=null;handle=null;base.OnDisable(); }
+        public void OnPointerExit(PointerEventData e){if(pointer==e.pointerId)longPressPoint=null;}
+        public void OnScroll(PointerEventData e) {longPressPoint=null;if(!AudioAssistSyllableDialog.IsOpen||AudioAssistSyllableDialog.IsTimeEditing)Controller.View.OnScroll(e);}
+        protected override void OnDisable() { pointer=null;longPressPoint=null;dragged=null;handle=null;base.OnDisable(); }
     }
 }
