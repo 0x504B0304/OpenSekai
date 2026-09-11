@@ -52,7 +52,7 @@ def main():
         subprocess.run([sys.executable, '-m', 'pip', 'install', '--target', str(packages),
                         '--upgrade', 'torch==2.8.0+cpu', 'torchaudio==2.8.0+cpu',
                         '--extra-index-url', 'https://download.pytorch.org/whl/cpu',
-                        '-r', str(ROOT / 'Assets/StreamingAssets/AudioAssist/requirements.txt')], check=True, env=install_env)
+                        '-r', str(ROOT / 'Tools/AudioAssist/Legacy/requirements.txt')], check=True, env=install_env)
         listing = subprocess.check_output([str(runtime / 'python.exe'), '-I', '-m', 'pip', 'list', '--format=json']) if (packages / 'pip').exists() else subprocess.check_output([
             str(runtime / 'python.exe'), '-I', '-c',
             'import importlib.metadata as m,json;print(json.dumps(sorted([(d.metadata["Name"],d.version) for d in m.distributions()])))'])
@@ -88,7 +88,7 @@ def main():
         urllib.request.urlretrieve('https://www.gnu.org/licenses/gpl-3.0.txt', decoder / 'LICENSE.txt')
     version = subprocess.check_output([str(decoder / 'ffmpeg.exe'), '-version'])
     (decoder / 'BUILD.txt').write_bytes(version + b'\nSource/build recipes: https://github.com/BtbN/FFmpeg-Builds\nFFmpeg source: https://github.com/FFmpeg/FFmpeg\n')
-    shutil.copy2(ROOT / 'Assets/StreamingAssets/AudioAssist/worker.py', dest / 'worker.py')
+    shutil.copy2(ROOT / 'Tools/AudioAssist/Legacy/worker.py', dest / 'worker.py')
     shutil.copy2(ROOT / 'Tools/AudioAssist/THIRD_PARTY_NOTICES.md', dest / 'THIRD_PARTY_NOTICES.md')
     # Embedded Python includes its LICENSE; wheels retain dist-info licenses.
     manifest = dict(schema=1, python=VERSION, torch='2.8.0+cpu', torchaudio='2.8.0+cpu', files=[])

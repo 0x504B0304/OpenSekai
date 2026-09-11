@@ -131,3 +131,10 @@ jsofttool.json
 /.audio-assist-venv/
 /.audio-assist-models/
 /.audio-assist-bundle/
+
+# Generated native inference binaries and converted models (prepare_native.ps1)
+/.audio-assist-native/
+/Assets/Plugins/AudioAssistNative/
+/Assets/Plugins/AudioAssistNative.meta
+/Assets/StreamingAssets/AudioAssistNative/
+/Assets/StreamingAssets/AudioAssistNative.meta

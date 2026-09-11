@@ -3,7 +3,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-source = Path(__file__).resolve().parents[2] / 'Assets/StreamingAssets/AudioAssist/worker.py'
+source = Path(__file__).resolve().parents[2] / 'Tools/AudioAssist/Legacy/worker.py'
 spec = importlib.util.spec_from_file_location('audio_assist_worker', source)
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
