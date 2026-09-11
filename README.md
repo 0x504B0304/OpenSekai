@@ -19,6 +19,17 @@ OpenSekai 是一个用于学习和研究目的的 Project Sekai 音乐游戏玩�
 - Windows 双版本 ZIP：`Sekai.EditorTools.OpenSekaiWindowsReleaseBuild.Build`，构建前将环境变量 `OPENSEKAI_FFMPEG_ROOT` 设为解压后的 FFmpeg 发行目录（包含 `LICENSE` 和 `bin/ffmpeg.exe`）。输出 `Builds/Release/win_amd64.zip`（不含 FFmpeg）及 `Builds/Release/win_amd64_ffmpeg.zip`（包含 FFmpeg、所需 DLL 和许可说明），自动排除调试符号、Unity 调试备份目录和日志。
 - Android：`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.BuildAndroidPlayer`
 
+Android 开发迭代可使用 Unity 的 Application Patching，避免每次把完整 APK 传给模拟器：先调用
+`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.BuildAndroidDevelopmentPlayer` 安装一次
+`Builds/Android-Incremental/OpenSekai-development.apk`，之后调用
+`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.PatchAndroidDevelopmentPlayer`。后者使用
+`Development + PatchPackage + BuildScriptsOnly`，会生成较小的
+`OpenSekai-development-patch.apk` 并部署到已连接的 Android 设备；设备需先通过 `adb connect` 连接。
+若本次改动包含场景、UI 或其他资源，可改用
+`Sekai.EditorTools.OpenSekaiAssetBundleBuildPipeline.PatchAndroidDevelopmentContent`，它使用
+`Development + PatchPackage` 收集所有变更，仍不需要重新传完整 APK。
+基础包和补丁包都必须是 Development 构建，补丁不能安装到当前 Release 包上。修改资源或原生库时应重新生成基础包；Release 发布仍使用完整 `BuildAndroidPlayer`。
+
 调用时使用 `<Unity 安装目录>/Editor/Unity.exe -batchmode -quit -projectPath <项目目录> -executeMethod <构建入口>`。构建流程会先生成对应平台的 AssetBundle，再生成 Player；默认输出分别为 `Builds/Windows` 和 `Builds/Android/OpenSekai.apk`。
 
 ## 社区功能

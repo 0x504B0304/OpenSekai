@@ -27,6 +27,10 @@ namespace Sekai.EditorTools
 		private const string WindowsExecutableName = "OpenSekai.exe";
 		private const string AndroidBuildDirectoryRelativePath = "Builds/Android";
 		private const string AndroidPackageName = "OpenSekai.apk";
+		private const string AndroidIncrementalBuildDirectoryRelativePath = "Builds/Android-Incremental";
+		private const string AndroidDevelopmentPackageName = "OpenSekai-development.apk";
+		private const string AndroidDevelopmentPatchPackageName = "OpenSekai-development-patch.apk";
+		private const string AndroidDevelopmentContentPatchPackageName = "OpenSekai-development-content-patch.apk";
 
 		[MenuItem(MenuPath)]
 		public static void BuildForActiveTargetMenu()
@@ -119,7 +123,7 @@ namespace Sekai.EditorTools
 				if (scenes.Length == 0) throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
 
 				string buildRoot = GetAbsoluteProjectPath("Builds");
-				string outputDirectory = GetAbsoluteProjectPath(AndroidBuildDirectoryRelativePath);
+				string outputDirectory = GetAbsoluteProjectPath(Environment.GetEnvironmentVariable("OPENSEKAI_ANDROID_OUTPUT") ?? AndroidBuildDirectoryRelativePath);
 				RecreateOwnedDirectory(outputDirectory, buildRoot);
 				string outputPath = Path.Combine(outputDirectory, AndroidPackageName);
 				BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
@@ -134,6 +138,118 @@ namespace Sekai.EditorTools
 					throw new BuildFailedException($"Android Player build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
 				}
 				Debug.Log($"OpenSekai Android Player built. output={outputPath}, size={report.summary.totalSize}, duration={report.summary.totalTime}");
+			}
+			finally
+			{
+				PlayerSettings.SetAdditionalIl2CppArgs(originalIl2CppArguments);
+				PlayerSettings.SetAdditionalCompilerArguments(NamedBuildTarget.Android, originalCompilerArguments);
+			}
+		}
+
+		/// <summary>
+		/// Creates the one-time Development base package used by Unity Android Application Patching.
+		/// Keep this package installed on the target device while iterating with PatchAndroidDevelopmentPlayer.
+		/// </summary>
+		[MenuItem("OpenSekai/Android/Build Development Base Package")]
+		public static void BuildAndroidDevelopmentPlayer()
+		{
+			BuildAndroidDevelopmentPackage(
+				Path.Combine(AndroidIncrementalBuildDirectoryRelativePath, AndroidDevelopmentPackageName),
+				BuildOptions.Development,
+				true);
+		}
+
+		/// <summary>
+		/// Builds a small patch for an installed Development package. Unity deploys the patch to the
+		/// connected Android device; it does not produce a standalone Release APK.
+		/// </summary>
+		[MenuItem("OpenSekai/Android/Patch Development Package")]
+		public static void PatchAndroidDevelopmentPlayer()
+		{
+			BuildAndroidDevelopmentPackage(
+				Path.Combine(AndroidIncrementalBuildDirectoryRelativePath, AndroidDevelopmentPatchPackageName),
+				BuildOptions.Development | BuildOptions.PatchPackage | BuildOptions.BuildScriptsOnly,
+				false);
+		}
+
+		/// <summary>
+		/// Builds a patch that includes changed assets as well as scripts. Use this when editing scenes,
+		/// UI assets or other Player data; the script-only patch is faster for code-only iterations.
+		/// </summary>
+		[MenuItem("OpenSekai/Android/Patch Development Package (All Changes)")]
+		public static void PatchAndroidDevelopmentContent()
+		{
+			BuildAndroidDevelopmentPackage(
+				Path.Combine(AndroidIncrementalBuildDirectoryRelativePath, AndroidDevelopmentContentPatchPackageName),
+				BuildOptions.Development | BuildOptions.PatchPackage,
+				false);
+		}
+
+		private static void BuildAndroidDevelopmentPackage(string relativeOutputPath, BuildOptions options, bool recreateOutput)
+		{
+			const BuildTarget target = BuildTarget.Android;
+			if (EditorUserBuildSettings.activeBuildTarget != target &&
+				!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, target))
+			{
+				throw new BuildFailedException($"Failed to switch the active build target to {target}.");
+			}
+
+#if UNITY_ANDROID
+			string androidPlayerRoot = Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines", "AndroidPlayer");
+			AndroidExternalToolsSettings.jdkRootPath = Path.Combine(androidPlayerRoot, "OpenJDK");
+			AndroidExternalToolsSettings.sdkRootPath = Path.Combine(androidPlayerRoot, "SDK");
+			AndroidExternalToolsSettings.ndkRootPath = Path.Combine(androidPlayerRoot, "NDK");
+#endif
+
+			PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+			PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+			EditorUserBuildSettings.development = true;
+			EditorUserBuildSettings.buildAppBundle = false;
+			string[] originalCompilerArguments = ConfigurePortableCompilerPaths(NamedBuildTarget.Android);
+			string originalIl2CppArguments = ConfigurePortableIl2CppPaths();
+
+			try
+			{
+				BuildForTarget(target, true);
+				string[] scenes = EditorBuildSettings.scenes
+					.Where(scene => scene.enabled)
+					.Select(scene => scene.path)
+					.ToArray();
+				if (scenes.Length == 0)
+				{
+					throw new BuildFailedException("No enabled scenes are configured in EditorBuildSettings.");
+				}
+
+				string buildRoot = GetAbsoluteProjectPath("Builds");
+				string outputDirectory = GetAbsoluteProjectPath(AndroidIncrementalBuildDirectoryRelativePath);
+				if (recreateOutput)
+				{
+					RecreateOwnedDirectory(outputDirectory, buildRoot);
+				}
+				else
+				{
+					Directory.CreateDirectory(outputDirectory);
+				}
+
+				string outputPath = GetAbsoluteProjectPath(relativeOutputPath);
+				BuildReport report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+				{
+					scenes = scenes,
+					locationPathName = outputPath,
+					target = target,
+					options = options
+				});
+
+				if (report.summary.result != BuildResult.Succeeded)
+				{
+					throw new BuildFailedException(
+						$"Android Development build failed. result={report.summary.result}, errors={report.summary.totalErrors}");
+				}
+
+				string mode = options.HasFlag(BuildOptions.PatchPackage) ? "patch" : "base";
+				Debug.Log(
+					$"OpenSekai Android Development {mode} built. output={outputPath}, " +
+					$"size={report.summary.totalSize}, duration={report.summary.totalTime}");
 			}
 			finally
 			{

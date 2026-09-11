@@ -286,7 +286,7 @@ PlayerSettings:
   AndroidIsGame: 1
   androidAppCategory: 3
   useAndroidAppCategory: 1
-  androidAppCategoryOther:
+  androidAppCategoryOther: 
   AndroidEnableTango: 0
   androidEnableBanner: 1
   androidUseLowAccuracyLocation: 0
@@ -622,7 +622,7 @@ PlayerSettings:
   switchRamDiskSpaceSize: 12
   switchUpgradedPlayerSettingsToNMETA: 0
   switchCaStoreSource: 0
-  switchCaStoreFilePath:
+  switchCaStoreFilePath: 
   ps4NPAgeRating: 12
   ps4NPTitleSecret: 
   ps4NPTrophyPackPath: 
@@ -753,6 +753,7 @@ PlayerSettings:
     iPhone: DOTWEEN
     tvOS: DOTWEEN
   additionalCompilerArguments:
+    Android: []
     Standalone: []
   platformArchitecture: {}
   scriptingBackend:
@@ -862,7 +863,7 @@ PlayerSettings:
   embeddedLinuxEnableGamepadInput: 1
   hmiCpuConfiguration: 
   hmiLogStartupTiming: 0
-  qnxGraphicConfPath:
+  qnxGraphicConfPath: 
   apiCompatibilityLevel: 6
   captureStartupLogs: {}
   activeInputHandler: 2

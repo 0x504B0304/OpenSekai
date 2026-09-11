@@ -107,7 +107,7 @@ MonoBehaviour:
       m_Values: []
     obsoleteHasProbeVolumes:
       m_Keys: []
-      m_Values:
+      m_Values: 
   references:
     version: 2
     RefIds:
@@ -401,7 +401,7 @@ MonoBehaviour:
         m_version: 0
         m_IncludeReferencedInScenes: 0
         m_IncludeAssetsByLabel: 0
-        m_LabelToInclude:
+        m_LabelToInclude: 
     - rid: 413152595177898018
       type: {class: RenderingDebuggerRuntimeResources, ns: UnityEngine.Rendering, asm: Unity.RenderPipelines.Core.Runtime}
       data:
