@@ -17,6 +17,7 @@ using UnityEngine.Networking;
 namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
 {
     public enum AssistAnalysisStatus { Idle, Running, Completed, Canceled, Failed }
+    public enum AssistAnalysisKind { None, Stems, Alignment }
     public sealed class AudioAssistController : MonoBehaviour
     {
         public static readonly string[] Keys = { "original", "vocals", "instrumental", "drums", "bass", "other" };
@@ -38,6 +39,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public bool Busy { get; private set; }
         public bool Analyzing { get; private set; }
         public AssistAnalysisStatus AnalysisStatus { get; private set; }
+        public AssistAnalysisKind AnalysisKind { get; private set; }
         public float AnalysisProgress { get; private set; }
         public string AnalysisStage { get; private set; } = "";
         public AssistDraft SelectedSyllable { get; private set; }
@@ -51,6 +53,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private AudioClip click;
         private bool originalNoteSound;
         private bool shuttingDown;
+        private bool explicitAnalysisRequest;
         public void Setup(MusicScoreMakerPresenter presenter, MusicScoreMakerView view, Transform tools)
         {
             if (Presenter != null) return;
@@ -100,7 +103,6 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                     await LoadFile(state.key, Path.Combine(directory, Path.GetFileName(state.path)), token);
             }
             Status = Ready ? "已读取原曲与可用分轨" : "请先导入原曲音频";Refresh();
-            await AutoSeparate(token);
         }
         public void Run(Func<CancellationToken, Task> operation)
         {
@@ -111,7 +113,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             Busy = true;job = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);Refresh();
             try { await operation(job.Token); }
-            catch (OperationCanceledException) { if (this != null) { Status = "已取消，已有谱面不变";if(AnalysisStatus==AssistAnalysisStatus.Running)AnalysisStatus=AssistAnalysisStatus.Canceled; } }
+            catch (OperationCanceledException) { if (this != null) { if (AnalysisStatus != AssistAnalysisStatus.Canceled) Status = "已取消，已有谱面不变";if(AnalysisStatus==AssistAnalysisStatus.Running)AnalysisStatus=AssistAnalysisStatus.Canceled; } }
             catch (Exception ex) { if (this != null) { Status = "处理失败：" + ex.Message;if(AnalysisStatus==AssistAnalysisStatus.Running)AnalysisStatus=AssistAnalysisStatus.Failed;Debug.LogWarning("Audio assist: " + ex); } }
             finally { job?.Dispose();job = null;Busy = false;if (this != null) Refresh(); }
         }
@@ -215,9 +217,13 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             if (string.IsNullOrEmpty(directory)) return;
             try
             {
-                string path = Path.Combine(directory, "session.json"), temp = path + ".tmp";
-                File.WriteAllText(temp, JsonUtility.ToJson(State, true));
-                if (File.Exists(path)) File.Replace(temp, path, null);else File.Move(temp, path);
+                string path = Path.Combine(directory, "session.json");
+                string json = JsonUtility.ToJson(State, true);
+                // Use a truncating stream: Android's provider rejects replace,
+                // overwrite-copy and rename when the destination already exists.
+                using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+                using var writer = new StreamWriter(stream);
+                writer.Write(json);
             }
             catch (Exception ex) { Status = "采音草稿保存失败：" + ex.Message; }
             Refresh();
@@ -238,7 +244,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             await Task.Run(() => File.Copy(path, dest), token);
             try { await LoadFile(key, dest, token);State.stems.First(s => s.key == key).path = Path.GetFileName(dest);Save(); }
             catch { File.Delete(dest);throw; }
-            if (key == "original") { await CheckSource(token);await AutoSeparate(token); }
+            if (key == "original") await CheckSource(token);
         }));
         private string SourcePath()
         {
@@ -264,15 +270,6 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             }
             Visible.Clear();Visible.Add("original");InspectedStem = "original";
             State.sourceFingerprint = fingerprint;State.automaticAttempt = null;Save();
-        }
-        private async Task AutoSeparate(CancellationToken token)
-        {
-            if (!Ready || !AudioAssistLocalAnalysis.Available || string.IsNullOrEmpty(State.sourceFingerprint)) return;
-            bool complete = Keys.Where(k => k != "original").All(k => Transport.Tracks.ContainsKey(k));
-            if (complete || State.automaticAttempt == State.sourceFingerprint) return;
-            // Persist before starting: cancellation/failure never creates a restart loop.
-            State.automaticAttempt = State.sourceFingerprint;Save();
-            await Analyze("ja", false, token);
         }
         private async Task LoadFile(string key, string path, CancellationToken token)
         {
@@ -305,8 +302,8 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         {
             if (!Transport.Tracks.ContainsKey(key))
             {
-                if (key != "original" && AudioAssistLocalAnalysis.Available) AnalyzeLocal("ja");
-                else Import(key);
+                if (key == "original") Import(key);
+                else { Status = "请先运行分轨，再启用该声部"; Refresh(); }
                 return;
             }
             var state = State.stems.First(s => s.key == key);state.enabled = !state.enabled;
@@ -355,7 +352,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public void ImportLyrics() => Pick(new[] { "lrc" }, path =>
         {
             if (Busy) return;
-            try { var lyrics = AudioAssistAlgorithms.ParseLrc(File.ReadAllText(path));if (lyrics.Count == 0) throw new IOException("LRC 中没有有效时间戳");File.Copy(path, lrcPath, true);State.lyrics = lyrics;State.sourceLyricOffset = 0;Status = "已导入歌词；普通 LRC 为逐句时间，可运行自动对齐";Save(); }
+            try { var lyrics = AudioAssistAlgorithms.ParseLrc(File.ReadAllText(path));if (lyrics.Count == 0) throw new IOException("LRC 中没有有效时间戳");File.Copy(path, lrcPath, true);State.lyrics = lyrics;State.sourceLyricOffset = 0;if(Transport!=null&&Transport.Tracks.ContainsKey("vocals")&&!Visible.Contains("vocals"))Visible.Add("vocals");Status = "已导入歌词；普通 LRC 为逐句时间，可运行歌词与音节对齐";Save();Refresh(); }
             catch (Exception ex) { Status = ex.Message;Refresh(); }
         });
         public void Audition(double from, double to, bool loop)
@@ -364,12 +361,57 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             State.loopA = Math.Max(0, from);State.loopB = Math.Min(Transport.Duration, Math.Max(State.loopA + (loop ? .15 : .01), to));State.loop = loop;
             Presenter.PlayAssist(State.loopA);stopAt = loop ? -1 : State.loopB;Refresh();
         }
-        public void AnalyzeLocal(string language)
+        public void AnalyzeStems(string language)
         {
-            Run(token => Analyze(language, true, token));
+            if (Busy) return;
+            Debug.Log("[AudioAssist] explicit stem analysis requested");
+            explicitAnalysisRequest = true;
+            AnalysisKind = AssistAnalysisKind.Stems;
+            Run(token => Analyze(language, false, token));
+        }
+        public void AlignLyrics(string language)
+        {
+            if (Busy) return;
+            if (!File.Exists(lrcPath) || State.lyrics == null || State.lyrics.Count == 0)
+            {
+                Status = "请先导入 LRC 歌词"; Refresh(); return;
+            }
+            if (Transport == null || !Transport.Tracks.ContainsKey("vocals"))
+            {
+                Status = "请先运行分轨，再进行歌词对齐"; Refresh(); return;
+            }
+            AnalysisKind = AssistAnalysisKind.Alignment;
+            Run(token => AlignLyricsOnly(language, token));
+        }
+        private async Task AlignLyricsOnly(string language, CancellationToken token)
+        {
+            AnalysisStatus=AssistAnalysisStatus.Running;AnalysisProgress=0;AnalysisStage="准备歌词对齐";Refresh();
+            Presenter.PauseAssist();
+            try
+            {
+                if (!Transport.Tracks.TryGetValue("vocals", out var vocals) || vocals.pcm == null)
+                    throw new IOException("请先运行分轨，再进行歌词对齐");
+                var output = await AudioAssistLocalAnalysis.AlignPcm(vocals.pcm, vocals.original.channels, vocals.original.frequency,
+                    lrcPath, directory, language, State.AlignmentOffset,
+                    (message, progress) => { AnalysisStage=message;AnalysisProgress=Math.Max(AnalysisProgress,progress);Status=message;Refresh(); }, token);
+                token.ThrowIfCancellationRequested();
+                if (output.lyrics == null || output.lyrics.Count == 0) throw new IOException("未能对齐歌词，请核对歌词、语言、读音和时间偏移");
+                State.AcceptAlignment(output.lyrics, State.AlignmentOffset);SelectedSyllable=null;
+                if(!Visible.Contains("vocals"))Visible.Add("vocals");
+                AnalysisProgress=1;AnalysisStage="对齐完成";AnalysisStatus=AssistAnalysisStatus.Completed;
+                Status = output.warnings != null && output.warnings.Count > 0 ? "歌词对齐完成，需核对：" + string.Join("；", output.warnings) : "歌词与音节对齐完成";Save();
+            }
+            catch (OperationCanceledException) { AnalysisStatus=AssistAnalysisStatus.Canceled;Status="已取消歌词对齐";throw; }
+            catch (Exception ex) { AnalysisStatus=AssistAnalysisStatus.Failed;Status=ex.Message;Refresh();throw; }
         }
         private async Task Analyze(string language, bool alignLyrics, CancellationToken token)
         {
+                Debug.Log("[AudioAssist] Analyze entered, explicit=" + explicitAnalysisRequest + ", align=" + alignLyrics);
+                if (!explicitAnalysisRequest)
+                {
+                    Status = "请从混音菜单的“运行分轨”按钮启动分轨"; Refresh(); return;
+                }
+                explicitAnalysisRequest = false;
                 AnalysisStatus=AssistAnalysisStatus.Running;AnalysisProgress=0;AnalysisStage="准备分析";Refresh();
                 Presenter.PauseAssist();
                 string audioPath = SourcePath();
@@ -379,7 +421,9 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 Analyzing = true;Refresh();
                 try
                 {
-                    output = await AudioAssistLocalAnalysis.Run(audioPath, alignLyrics && File.Exists(lrcPath) ? lrcPath : null, directory, language, alignmentOffset,
+                    if (!Transport.Tracks.TryGetValue("original", out var original) || original.pcm == null)
+                        throw new IOException("原曲尚未解码完成");
+                    output = await AudioAssistLocalAnalysis.RunPcm(original.pcm, original.original.channels, original.original.frequency, alignLyrics && File.Exists(lrcPath) ? lrcPath : null, directory, language, alignmentOffset,
                         (message, progress) => { AnalysisStage=message;AnalysisProgress=Math.Max(AnalysisProgress,progress*.94f);Status = message + "（可继续原曲回听）";Refresh(); }, token);
                 }
                 finally { Analyzing = false;Refresh(); }
@@ -414,17 +458,15 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             if (stopAt >= 0 && now >= stopAt) { stopAt = -1;Presenter.PauseAssist();return; }
             if (now > previousTime && now - previousTime < .15)
             {
-                bool play = State.draftSound && State.drafts.Any(d => d.seconds > previousTime && d.seconds <= now);
-                if (State.metronome) { long a = Presenter.AssistTicks(previousTime), b = Presenter.AssistTicks(now);play |= a / 480 != b / 480; }
-                if (play) cues.PlayOneShot(click);
+                if (State.draftSound && State.drafts.Any(d => d.seconds > previousTime && d.seconds <= now)) cues.PlayOneShot(click, State.draftVolume);
+                if (State.metronome) { long a = Presenter.AssistTicks(previousTime), b = Presenter.AssistTicks(now);if (a / 480 != b / 480) cues.PlayOneShot(click, State.metronomeVolume); }
             }
             else if (now < previousTime && State.loop)
             {
-                bool play = State.draftSound && State.drafts.Any(d =>
-                    (d.seconds > previousTime && d.seconds < State.loopB) || (d.seconds >= State.loopA && d.seconds <= now));
-                if (State.metronome)
-                    play |= Presenter.AssistTicks(State.loopA - .001) / 480 != Presenter.AssistTicks(now) / 480;
-                if (play) cues.PlayOneShot(click);
+                if (State.draftSound && State.drafts.Any(d =>
+                    (d.seconds > previousTime && d.seconds < State.loopB) || (d.seconds >= State.loopA && d.seconds <= now))) cues.PlayOneShot(click, State.draftVolume);
+                if (State.metronome && Presenter.AssistTicks(State.loopA - .001) / 480 != Presenter.AssistTicks(now) / 480)
+                    cues.PlayOneShot(click, State.metronomeVolume);
             }
             previousTime = now;
         }

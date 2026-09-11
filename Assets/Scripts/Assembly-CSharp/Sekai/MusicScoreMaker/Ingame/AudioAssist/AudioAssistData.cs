@@ -50,6 +50,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         }
         public bool loop, music = true, metronome, draftSound, noteSound = true;
         public float sensitivity = .55f;
+        public float metronomeVolume = 1f, draftVolume = 1f, noteVolume = 1f;
     }
     public sealed class AssistAnalysis
     {

@@ -29,8 +29,34 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private readonly double[] ends = new double[2];
         private int generation;
         private AudioListener ownedListener;
+        private double rawDsp, rawDspFrame;
+        private int positionFrame = -1;
+        private double positionCache;
         public bool Busy { get; private set; }
-        public double Position => Playing ? Math.Min(Duration, AudioAssistAlgorithms.LoopPosition(startTime, AudioSettings.dspTime - startDsp, Rate, looping, a, b)) : parkedTime;
+        public double Position
+        {
+            get
+            {
+                if (!Playing) return parkedTime;
+                // Every lane reads the same value within a frame. The canvas rebuild can
+                // span many milliseconds, and a per-call time would make the lanes draw
+                // their playheads at different positions.
+                if (positionFrame == Time.frameCount) return positionCache;
+                positionFrame = Time.frameCount;
+                positionCache = Math.Min(Duration, AudioAssistAlgorithms.LoopPosition(startTime, DspNow() - startDsp, Rate, looping, a, b));
+                return positionCache;
+            }
+        }
+        // AudioSettings.dspTime only advances once per audio buffer, so sampling it per
+        // frame makes the playhead step. Extrapolate between DSP updates with the wall
+        // clock; the estimate resets on every real DSP tick so it cannot drift.
+        private double DspNow()
+        {
+            double now = Time.realtimeSinceStartupAsDouble;
+            double dsp = AudioSettings.dspTime;
+            if (dsp != rawDsp) { rawDsp = dsp; rawDspFrame = now; }
+            return rawDsp + Math.Min(.05, Math.Max(0, now - rawDspFrame));
+        }
         public bool Ended => Playing && !looping && Position >= Duration;
 
         private void OnEnable()
@@ -131,6 +157,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             looping &= b - a >= .15;
             if (looping && (startTime < a || startTime >= b)) startTime = a;
             startDsp = AudioSettings.dspTime + .07;
+            rawDsp = AudioSettings.dspTime;rawDspFrame = Time.realtimeSinceStartupAsDouble;positionFrame = -1;
             double end = looping ? b : Duration;
             nextDsp = startDsp + (end - startTime) / Rate;
             Schedule(0, startDsp, startTime, end);

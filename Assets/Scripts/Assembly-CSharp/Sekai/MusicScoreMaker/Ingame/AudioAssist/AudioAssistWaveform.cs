@@ -13,6 +13,8 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         public AudioAssistController Controller;
         public string StemKey;
         public AudioAssistLyricOverlay Lyrics;
+        // Only the leftmost visible lane owns the add-marker "+" affordance.
+        public bool ShowMarkerIcon = true;
         private long start, end;
         private Vector2 press;
         private double pressSeconds, dragSeconds;
@@ -25,8 +27,23 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private Vector2 pressScreen;
         private double[] edgeTimes = Array.Empty<double>();
         private float lastPixelHeight;
+        private const float MarkerIconSize = 22f;
         private float Width => rectTransform.rect.width;
         private float Height => rectTransform.rect.height;
+        private float MarkerIconX => -Width/2 + MarkerIconSize*.5f + 6;
+        private double MarkerSeconds => Controller.Transport.Playing ? Controller.Transport.Position : Controller.SelectedSeconds;
+        private bool IsMarkerIcon(Vector2 local, float y)
+        {
+            float half = MarkerIconSize*.5f;
+            return Math.Abs(local.x - MarkerIconX) <= half && Math.Abs(local.y - y) <= half;
+        }
+        private void DrawMarkerIcon(VertexHelper vh, float y)
+        {
+            float s = MarkerIconSize, t = Mathf.Max(2, s*.16f), cx = MarkerIconX;
+            Quad(vh, cx - s*.5f, y - s*.5f, s, s, new Color(.43f,.94f,.87f,.92f));
+            Quad(vh, cx - s*.34f, y - t*.5f, s*.68f, t, new Color(.14f,.18f,.25f));
+            Quad(vh, cx - t*.5f, y - s*.34f, t, s*.68f, new Color(.14f,.18f,.25f));
+        }
         public double SecondsAtY(float y)
         {
             start=MusicScoreMakerUtility.GetPreviewStartTicks();end=MusicScoreMakerUtility.GetPreviewEndTicks();
@@ -128,7 +145,12 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 Quad(vh,left,a-7,20,14,new Color(.4f,1,.8f));Quad(vh,left,b-7,20,14,new Color(.4f,1,.8f));
             }
             double current = Controller.Transport.Playing ? Controller.Transport.Position : Controller.SelectedSeconds;
-            if (current >= min && current <= max) Quad(vh,left,Y(current)-1,Width,2,new Color(1,.5f,.76f));
+            if (current >= min && current <= max)
+            {
+                float lineY = Y(current);
+                Quad(vh,left,lineY-1,Width,2,new Color(1,.5f,.76f));
+                if (ShowMarkerIcon) DrawMarkerIcon(vh,lineY);
+            }
         }
         private static void Quad(VertexHelper vh, float x,float y,float w,float h,Color color)
         {
@@ -149,6 +171,13 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 return;
             }
             if(e.button!=PointerEventData.InputButton.Left)return;
+            start=MusicScoreMakerUtility.GetPreviewStartTicks();end=MusicScoreMakerUtility.GetPreviewEndTicks();
+            double marker=MarkerSeconds;
+            if(ShowMarkerIcon&&marker>=Controller.Presenter.AssistSeconds(start)&&marker<=Controller.Presenter.AssistSeconds(end)&&IsMarkerIcon(Local(e),Y(marker)))
+            {
+                Controller.AddDraft(marker);
+                return;
+            }
             pointer=e.pointerId;
             pressScreen=e.position;pressTime=Time.unscaledTimeAsDouble;longPressPoint=null;
             if(!string.IsNullOrEmpty(StemKey))Controller.InspectedStem=StemKey;

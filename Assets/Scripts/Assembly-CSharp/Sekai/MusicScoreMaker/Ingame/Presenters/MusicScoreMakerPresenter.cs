@@ -1134,6 +1134,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 		private void ExitToOutGame()
 		{
+			// Ensure transient editor/audio-assist UI is torn down before navigating.
+			Sekai.MusicScoreMaker.Ingame.AudioAssist.AudioAssistSyllableDialog.CloseFor(_view?.AudioAssist);
 			if (_model?.CustomMusicScoreEntry != null || _fromScreenType == MenuScreenType.MusicScoreMakerTop)
 			{
 				ReturnToMusicScoreMakerTop();
@@ -2606,7 +2608,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Presenters
 
 			if (_tapSeDict != null && _tapSeDict.TryGetValue(GetTapSeKey(category, type), out string cueName))
 			{
-				SoundManager.Instance.PlayIngameSEOneShot(cueName);
+				SoundManager.Instance.PlayIngameSEOneShot(cueName, AudioAssist?.State?.noteVolume ?? 1f);
 			}
 
 			if (isLongFirst)

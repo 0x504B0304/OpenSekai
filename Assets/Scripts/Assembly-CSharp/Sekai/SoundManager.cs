@@ -504,6 +504,11 @@ namespace Sekai
 			PlayIngameSEOneShotInternal(cueName, 0);
 		}
 
+		public void PlayIngameSEOneShot(string cueName, float volume)
+		{
+			PlayIngameSEOneShotInternal(cueName, 0, volume);
+		}
+
 		public void PlayIngameVoiceOneShot(string cueName)
 		{
 			PlayIngameSEOneShotInternal(cueName, 0);
@@ -575,7 +580,7 @@ namespace Sekai
 			}
 		}
 
-		private void PlayIngameSEOneShotInternal(string cueName, int priority)
+		private void PlayIngameSEOneShotInternal(string cueName, int priority, float volume = 1f)
 		{
 			string resolvedCueName = ResolveCueName(cueName, out CriAtomExAcb acb);
 			if (string.IsNullOrEmpty(resolvedCueName) || acb == null)
@@ -588,6 +593,7 @@ namespace Sekai
 			{
 				CriAtomExPlayer player = GetIngameSoundEffectPlayer();
 				player.SetCue(acb, resolvedCueName);
+				player.SetVolume(masterVolume * seVolume * Mathf.Clamp01(volume));
 				player.SetVoicePriority(priority);
 				player.Start();
 			}
