@@ -138,3 +138,6 @@ jsofttool.json
 /Assets/Plugins/AudioAssistNative.meta
 /Assets/StreamingAssets/AudioAssistNative/
 /Assets/StreamingAssets/AudioAssistNative.meta
+
+# Unity project-upgrade reports
+UpgradeLog*.htm
