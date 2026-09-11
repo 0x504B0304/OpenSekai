@@ -153,10 +153,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		private CustomButton _redoButton;
 
 		[SerializeField]
-		private CustomButton _saveButton;
-
-		[SerializeField]
-		private CustomButton _testPlayButton;
+		private EditorActionDock _editorActionDock;
 
 		[SerializeField]
 		private UIPartsLeftTabList _leftTabList;
@@ -181,9 +178,6 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 
 		[SerializeField]
 		private QuantizeSettingsView _quantizeSettingsView;
-
-		[SerializeField]
-		private ZoomScaleInputView _zoomScaleInputView;
 
 		private Vector2 _originalSize;
 		private float _audioAssistWidth;
@@ -246,11 +240,19 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			}
 		}
 
+		public EditorActionDock EditorDock
+		{
+			get
+			{
+				return _editorActionDock;
+			}
+		}
+
 		public CustomButton SaveButton
 		{
 			get
 			{
-				return _saveButton;
+				return _editorActionDock != null ? _editorActionDock.SaveButton : null;
 			}
 		}
 
@@ -266,7 +268,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 		{
 			get
 			{
-				return _testPlayButton;
+				return _editorActionDock != null ? _editorActionDock.TestButton : null;
 			}
 		}
 
@@ -382,6 +384,7 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			SetScoreDisplayScale();
 			if (MusicScoreMakerEventDispatcher.ExistsInstance) MusicScoreMakerEventDispatcher.Instance.Publish(new UpdateMusicScoreEvent());
 		}
+		public AudioAssist.AudioAssistController AudioAssist => _audioAssistController;
 
 		// Called after restoring native geometry. Keep the screenshot's native lane
 		// width as the maximum, and fit it between the currently visible side panels.
@@ -434,10 +437,6 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
 			if (_quantizeSettingsView != null)
 			{
 				_quantizeSettingsView.Setup();
-			}
-			if (_zoomScaleInputView != null)
-			{
-				_zoomScaleInputView.Setup();
 			}
 		}
 

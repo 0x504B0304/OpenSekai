@@ -274,5 +274,14 @@
   "menuui.dark": "Dark",
   "menuui.theme": "Menu theme (applies immediately)",
   "editor.audio_assist": "Audio assist",
-  "editor.minimap": "Minimap"
+  "editor.minimap": "Minimap",
+  "editor.audio_assist.mix.original": "Original",
+  "editor.audio_assist.mix.vocals": "Vocals",
+  "editor.audio_assist.mix.instrumental": "Instrumental",
+  "editor.audio_assist.mix.drums": "Drums",
+  "editor.audio_assist.mix.bass": "Bass",
+  "editor.audio_assist.mix.other": "Melody",
+  "editor.audio_assist.mix.metronome": "Metronome",
+  "editor.audio_assist.mix.draft": "Draft cue",
+  "editor.audio_assist.mix.note": "Chart notes"
 }

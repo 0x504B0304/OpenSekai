@@ -8,7 +8,8 @@ namespace Sekai.MusicScoreMaker.Ingame.Views
     public sealed class EditorActionIcon : MaskableGraphic, IPointerEnterHandler, IPointerExitHandler
     {
         public enum Kind { Test, Save, Audio, Map }
-        public Kind Symbol;
+        [SerializeField] private Kind symbol;
+        public Kind Symbol { get=>symbol; set { if(symbol==value)return; symbol=value; SetVerticesDirty(); } }
         public Action<bool> Hover;
         private bool selected;
         public bool Selected { get=>selected;set {if(selected==value)return;selected=value;SetVerticesDirty();} }

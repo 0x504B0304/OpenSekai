@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Sekai.Localization;
 using Sekai.MusicScoreMaker.Ingame.Events;
 using Sekai.MusicScoreMaker.Ingame.Utilities;
 using TMPro;
@@ -24,18 +25,20 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private float layoutScale;
         private readonly List<(TMP_Text text,float size)> labels=new List<(TMP_Text,float)>();
         private TMP_Text status, inspector;
-        private Button analysisButton, cancelAnalysis, analysisLanguage;
-        private Image analysisFill;
-        private TMP_Text analysisLabel;
+        private Button stemAnalysisButton, alignButton;
+        private Image stemAnalysisFill, alignFill;
+        private TMP_Text stemAnalysisLabel, alignLabel;
+        private Button languageDropdownButton;
+        private GameObject languageDropdownMenu;
         private Button leftEntry;
         private EditorActionDock dock;
         private AudioAssistFoldArrowGraphic leftArrow;
         private MenuSegments rates;
-        private MenuRange loopRange;
+
         private readonly Dictionary<string, Button> stems = new Dictionary<string, Button>();
         private readonly List<GameObject> groups = new List<GameObject>();
         private readonly List<GameObject> leftTools = new List<GameObject>();
-        private readonly Dictionary<string, TMP_InputField> offsets = new Dictionary<string, TMP_InputField>();
+        private readonly Dictionary<string, (Button button,Func<bool> on,Color color)> aux = new Dictionary<string, (Button,Func<bool>,Color)>();
         private sealed class WaveLane
         {
             public RectTransform root;
@@ -46,12 +49,12 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             public float preferred, actual;
         }
         private readonly Dictionary<string,WaveLane> waveLanes=new Dictionary<string,WaveLane>();
-        private RectTransform controlsViewport;
+        private RectTransform controlsViewport,waveDivider;
         private string[] visibleKeys=Array.Empty<string>();
         private float waveWidth, maxWaveWidth, minimumWaveWidth, resizeStartWidth;
         private string resizingKey;
         private Transform drafts, lyrics;
-        private TMP_InputField aInput, bInput, draftTime, lyricOffset, bpmInput, beatsInput;
+        private TMP_InputField draftTime, lyricOffset, bpmInput, beatsInput;
         private int language;
         private int lyricPage, draftPage;
         private bool open, leftOpen = true;
@@ -78,9 +81,13 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             quantize=tools!=null?tools.Find("QuantizeSettingsView") as RectTransform:null;
             toolsList=tools!=null?tools.Find("List") as RectTransform:null;
             if(quantize!=null)quantizePosition=quantize.anchoredPosition;
-            var dockObject=new GameObject("EditorActionDock",typeof(RectTransform));dockObject.transform.SetParent(canvas.transform,false);
-            dock=dockObject.AddComponent<EditorActionDock>();
-            dock.Build(canvas,tools,font,()=>Toggle(!open),()=>{LayoutPanels();LateUpdate();});
+            dock=owner.View!=null?owner.View.EditorDock:null;
+            if(dock==null)
+            {
+                var dockObject=new GameObject("EditorActionDock",typeof(RectTransform));dockObject.transform.SetParent(canvas.transform,false);
+                dock=dockObject.AddComponent<EditorActionDock>();
+            }
+            dock.Build(canvasRect,canvas.scaleFactor,tools,font,()=>Toggle(!open),()=>{LayoutPanels();LateUpdate();});
             var arrowObject=new GameObject("AudioAssistToolsToggle",typeof(RectTransform));
             arrowObject.transform.SetParent(canvas.transform,false);
             leftArrow=arrowObject.AddComponent<AudioAssistFoldArrowGraphic>();
@@ -94,34 +101,48 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             arrowColors.fadeDuration=.1f;leftEntry.colors=arrowColors;
             leftEntry.onClick.AddListener(()=>ToggleTools(!leftOpen));
             root=Rect("AudioAssistPanel",canvas.transform,PanelColor);root.sizeDelta=new Vector2(width,900);
+            // Stay hidden until Build completes; a mid-build failure must not leave a half-built panel on screen.
+            root.gameObject.SetActive(false);
             root.gameObject.AddComponent<RectMask2D>();
+            waveDivider=Rect("WaveControlsDivider",root,MenuTheme.Border);waveDivider.anchorMin=new Vector2(0,0);waveDivider.anchorMax=new Vector2(0,1);waveDivider.pivot=new Vector2(.5f,.5f);waveDivider.sizeDelta=new Vector2(2,0);waveDivider.GetComponent<Image>().raycastTarget=false;
             RectTransform viewport=Rect("AssistControls",root,Color.clear);controlsViewport=viewport;viewport.gameObject.AddComponent<RectMask2D>();
             var scroll=viewport.gameObject.AddComponent<ScrollRect>();scroll.horizontal=false;scroll.movementType=ScrollRect.MovementType.Clamped;scroll.scrollSensitivity=45;scroll.viewport=viewport;
             RectTransform content=Rect("Content",viewport,Color.clear);content.anchorMin=new Vector2(0,1);content.anchorMax=Vector2.one;content.pivot=new Vector2(.5f,1);content.sizeDelta=Vector2.zero;
-            Vertical(content,12);content.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;scroll.content=content;
-            var header=Row(content);Label(header,"采音辅助",27,buttonHeight);
-            status=Label(content,"读取音频…",18,90);
-            var sound=Container(content);
-            Label(sound,"混音",22,36);
-            Label(sound,"按钮亮起参与混音 · 可多选",18,36);
-            for(int i=0;i<KeysLength;i+=2)
-            {
-                var row=Row(sound);
-                for(int j=i;j<Math.Min(KeysLength,i+2);j++){string key=AudioAssistController.Keys[j];stems[key]=Button(row,AudioAssistController.Names[j],()=>owner.ToggleStem(key));}
-            }
-            rates=MenuControls.Segments(sound,new[]{"1×","0.75×","0.5×"},0,font,buttonHeight,i=>owner.ChangeRate(new[]{1f,.75f,.5f}[i]));
-            Label(sound,"保音高慢放；首次需准备音频",17,45);
-            var files=Fold(content,"音量、波形与导入");
+            var contentLayout=Vertical(content,12);contentLayout.padding=new RectOffset(14,52,0,0);content.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;scroll.content=content;
+            Label(content,"采音辅助",27,42);
+            // Status hugs the title; the first card starts right below it.
+            status=Label(content,"读取音频…",18,48);status.alignment=TextAlignmentOptions.TopLeft;
+            var sound=Section(content,"混音",true);
+            Label(sound,"按钮亮起参与混音 · 拖动右侧调整音量",18,36);
             for(int i=0;i<KeysLength;i++)
             {
                 string key=AudioAssistController.Keys[i];
-                Label(files,AudioAssistController.Names[i],22,36);
-                var row=Row(files);Button(row,"导入",()=>owner.Import(key));Button(row,"波形",()=>{if(!owner.Transport.Tracks.ContainsKey(key))return;if(!owner.Visible.Contains(key))owner.Visible.Add(key);owner.InspectedStem=key;Refresh();});
-                Slider(files,owner.State.stems.First(s=>s.key==key).volume,value=>{owner.State.stems.First(s=>s.key==key).volume=value;owner.Transport.ApplyMix();owner.Save();});
-                offsets[key]=Number(files,"起始偏移（秒）",0,value=>{owner.Presenter.PauseAssist();owner.State.stems.First(s=>s.key==key).offset=value;owner.Save();});
+                var row=MixRow(sound);
+                stems[key]=Button(row,AudioAssistController.Names[i],()=>owner.ToggleStem(key));
+                NarrowButton(stems[key]);
+                Localize(stems[key],"editor.audio_assist.mix."+key);
+                WideSlider(Slider(row,owner.State.stems.First(s=>s.key==key).volume,value=>{owner.State.stems.First(s=>s.key==key).volume=value;owner.Transport.ApplyMix();owner.Save();}));
             }
+            AuxChannel(sound,"metronome","editor.audio_assist.mix.metronome",()=>owner.State.metronome,()=>{owner.State.metronome=!owner.State.metronome;owner.Save();},()=>owner.State.metronomeVolume,v=>{owner.State.metronomeVolume=v;owner.Save();});
+            AuxChannel(sound,"draft","editor.audio_assist.mix.draft",()=>owner.State.draftSound,()=>{owner.State.draftSound=!owner.State.draftSound;owner.Save();},()=>owner.State.draftVolume,v=>{owner.State.draftVolume=v;owner.Save();});
+            AuxChannel(sound,"note","editor.audio_assist.mix.note",()=>owner.State.noteSound,()=>{owner.State.noteSound=!owner.State.noteSound;owner.Save();},()=>owner.State.noteVolume,v=>{owner.State.noteVolume=v;owner.Save();});
+            rates=MenuControls.Segments(sound,new[]{"1×","0.75×","0.5×"},0,font,buttonHeight,i=>owner.ChangeRate(new[]{1f,.75f,.5f}[i]));
+            Label(sound,"保音高慢放；首次需准备音频",17,45);
+            stemAnalysisButton=ProgressButton(sound,"运行分轨",()=>
+            {
+                if(owner.AnalysisStatus==AssistAnalysisStatus.Running&&owner.AnalysisKind==AssistAnalysisKind.Stems)owner.Cancel();
+                else owner.AnalyzeStems(new[]{"ja","zh","en"}[language]);
+            },out stemAnalysisFill,out stemAnalysisLabel);
             var lrcGroup=Fold(content,"歌词与音节");
             Button(lrcGroup,"导入 LRC",owner.ImportLyrics);
+            languageDropdownButton=Button(lrcGroup,LanguageLabel(),null);
+            languageDropdownButton.onClick.AddListener(ToggleLanguageDropdown);
+            languageDropdownMenu=BuildLanguageDropdownMenu(lrcGroup);
+            alignButton=ProgressButton(lrcGroup,"对齐歌词与音节",()=>
+            {
+                if(owner.AnalysisStatus==AssistAnalysisStatus.Running&&owner.AnalysisKind==AssistAnalysisKind.Alignment)owner.Cancel();
+                else owner.AlignLyrics(new[]{"ja","zh","en"}[language]);
+            },out alignFill,out alignLabel);
             lyricOffset=Number(lrcGroup,"歌词整体偏移（秒）",owner.State.lyricOffset,value=>{owner.State.lyricOffset=value;owner.Save();});
             Label(lrcGroup,"普通 LRC 按句；自动对齐或增强 LRC 可逐音节试听。",17,80);
             var lyricNavigation=Row(lrcGroup);
@@ -129,34 +150,13 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             Button(lyricNavigation,"下一句",()=>FocusLyric(lyricPage+1));
             Button(lrcGroup,"当前附近歌词",()=>{lyricPage=Math.Max(0,owner.State.lyrics.FindLastIndex(l=>l.seconds+owner.State.lyricOffset<=owner.SelectedSeconds));lyricSignature=null;Refresh();});
             lyrics=Container(lrcGroup);
-            var analysis=Fold(content,"内置自动分析");
-            var languageButton=Button(analysis,"语言：日语",()=>{});
-            analysisLanguage=languageButton;
-            languageButton.onClick.AddListener(()=>{language=(language+1)%3;languageButton.GetComponentInChildren<TMP_Text>().text="语言："+new[]{"日语","中文","英语（词）"}[language];});
-            analysisButton=Button(analysis,"分轨并对齐歌词",()=>owner.AnalyzeLocal(new[]{"ja","zh","en"}[language]));
-            analysisButton.transition=Selectable.Transition.None;
-            analysisButton.gameObject.AddComponent<Mask>().showMaskGraphic=true;
-            analysisLabel=analysisButton.GetComponentInChildren<TMP_Text>();
-            analysisLabel.enableAutoSizing=true;analysisLabel.fontSizeMin=16;analysisLabel.fontSizeMax=23;
-            var fillRect=Rect("AnalysisProgress",analysisButton.transform,Color.clear);
-            fillRect.anchorMin=Vector2.zero;fillRect.anchorMax=Vector2.one;fillRect.offsetMin=fillRect.offsetMax=Vector2.zero;
-            fillRect.gameObject.AddComponent<LayoutElement>().ignoreLayout=true;
-            analysisFill=fillRect.GetComponent<Image>();analysisFill.raycastTarget=false;
-            analysisLabel.transform.SetAsLastSibling();
-            cancelAnalysis=Button(analysis,"取消处理",owner.Cancel);
-            Label(analysis,"Windows 版自带模型，原曲自动分轨，无需安装或联网。唱歌对齐仍需试听核对。",17,90);
             var marks=Section(content,"起音与标记");
             inspector=Label(marks,"点击波形定位",21,90);
             Switch(marks,"起音提示",()=>owner.ShowOnsets,()=>{owner.ShowOnsets=!owner.ShowOnsets;Refresh();});
             Label(marks,"提示灵敏度",18,36);Slider(marks,owner.State.sensitivity,v=>{owner.State.sensitivity=v;Refresh();});
             Button(marks,"试听附近",()=>owner.Audition(owner.SelectedSeconds-.3,owner.SelectedSeconds+.6,false));
-            Button(marks,"＋ 采音草稿",()=>owner.AddDraft(owner.SelectedSeconds,owner.SelectedSyllable?.label??""));
-            var zoom=Row(marks);Button(zoom,"缩小",()=>MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomOutTimelineEvent()));Button(zoom,"放大",()=>MusicScoreMakerEventDispatcher.Instance.Publish(new ZoomInTimelineEvent()));
             var loop=Section(content,"试听与循环",true);
-            loopRange=MenuControls.Range(loop,font,buttonHeight,(a,b)=>{if(refreshing)return;owner.Presenter.PauseAssist();owner.State.loopA=Math.Min(a,Math.Max(0,b-.15));owner.State.loopB=Math.Min(owner.Transport.Duration,Math.Max(b,owner.State.loopA+.15));owner.Save();});
             Switch(loop,"框选区间",()=>owner.RegionMode,()=>{owner.RegionMode=!owner.RegionMode;Refresh();});
-            aInput=Number(loop,"A（音频秒）",owner.State.loopA,v=>{owner.Presenter.PauseAssist();owner.State.loopA=Math.Max(0,Math.Min(v,owner.State.loopB-.15));owner.Save();});
-            bInput=Number(loop,"B（音频秒）",owner.State.loopB,v=>{owner.Presenter.PauseAssist();owner.State.loopB=Math.Min(owner.Transport.Duration,Math.Max(v,owner.State.loopA+.15));owner.Save();});
             Switch(loop,"启用循环",()=>owner.State.loop,()=>{owner.Presenter.PauseAssist();owner.State.loop=!owner.State.loop;owner.Save();});
             Button(loop,"播放选区",()=>owner.Audition(owner.State.loopA,owner.State.loopB,true));
             var draftGroup=Section(content,"采音草稿");
@@ -170,11 +170,6 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             Button(draftNavigation,"上一页",()=>{draftPage=Math.Max(0,draftPage-1);draftSignature=null;Refresh();});
             Button(draftNavigation,"下一页",()=>{draftPage=Math.Min(Math.Max(0,(owner.State.drafts.Count-1)/20),draftPage+1);draftSignature=null;Refresh();});
             drafts=Container(draftGroup);
-            var check=Section(content,"回听核对");
-            Switch(check,"音乐",()=>owner.State.music,()=>{owner.State.music=!owner.State.music;owner.Transport.ApplyMix();owner.Save();});
-            Switch(check,"节拍器",()=>owner.State.metronome,()=>{owner.State.metronome=!owner.State.metronome;owner.Save();});
-            Switch(check,"草稿提示音",()=>owner.State.draftSound,()=>{owner.State.draftSound=!owner.State.draftSound;owner.Save();});
-            Switch(check,"音符打击音",()=>owner.State.noteSound,()=>{owner.State.noteSound=!owner.State.noteSound;owner.Save();});
             var timing=Section(content,"节拍校准");
             bpmInput=Number(timing,"BPM",120,_=>{});
             Button(timing,"敲拍估算",()=>{double now=Time.realtimeSinceStartupAsDouble;if(taps.Count>0&&now-taps[taps.Count-1]>3)taps.Clear();taps.Add(now);if(taps.Count>1)bpmInput.SetTextWithoutNotify((60*(taps.Count-1)/(now-taps[0])).ToString("0.00",CultureInfo.InvariantCulture));});
@@ -186,7 +181,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             Button(timing,"在当前点应用 BPM",()=>{if(TryNumber(bpmInput.text,out var bpm)){owner.Presenter.PauseAssist();try{owner.Presenter.ApplyAssistBpm(owner.SelectedSeconds,bpm);owner.Status="已应用 BPM，可用原撤销按钮恢复";}catch(Exception ex){owner.Status=ex.Message;}Refresh();}});
             Button(content,"保存采音状态",()=>{owner.Save();owner.Status="采音草稿已保存；正式音符请用游戏保存按钮保存";Refresh();});
             // Keep mixing and looping adjacent; advanced groups follow them.
-            loop.parent.SetSiblingIndex(sound.GetSiblingIndex()+1);
+            loop.parent.SetSiblingIndex(sound.parent.GetSiblingIndex()+1);
             foreach(var label in root.GetComponentsInChildren<TMP_Text>(true))
                 if(!labels.Any(item=>item.text==label)){labels.Add((label,label.fontSize));label.fontSize=Math.Max(label.fontSize,12/Math.Max(.1f,canvas.scaleFactor));}
             MenuThemeBinding.Capture(root);MenuTheme.Changed+=Refresh;
@@ -293,6 +288,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             root.anchoredPosition=new Vector2(bottom.x+8,center);root.sizeDelta=new Vector2(width,visibleTop-visibleBottom);
             controlsViewport.anchorMin=Vector2.zero;controlsViewport.anchorMax=Vector2.one;
             controlsViewport.offsetMin=new Vector2(waveWidth+10,0);controlsViewport.offsetMax=new Vector2(-8,0);
+            if(waveDivider!=null)waveDivider.anchoredPosition=new Vector2(waveWidth+5,0);
             float laneLeft=0;
             foreach(string key in visibleKeys)
             {
@@ -317,9 +313,62 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             var face=button.image;var label=button.GetComponentInChildren<TMP_Text>(true);
             var faceBinding=face.GetComponent<MenuThemeBinding>();if(faceBinding!=null)faceBinding.enabled=false;
             var labelBinding=label.GetComponent<MenuThemeBinding>();if(labelBinding!=null)labelBinding.enabled=false;
-            face.color=on?AudioAssistStemColors.For(key):MenuTheme.ButtonFace;
+            face.color=on?AudioAssistStemColors.For(key):MenuTheme.Background;
             label.color=on?new Color(.14f,.18f,.25f):MenuTheme.ButtonInk;
-            label.text=AudioAssistController.Names[Array.IndexOf(AudioAssistController.Keys,key)];
+            var colors=button.colors;colors.selectedColor=Color.white;button.colors=colors;
+        }
+        // Non-waveform mix channels (metronome, draft cue, note SE): colored toggle + volume.
+        private void AuxChannel(Transform parent,string key,string labelKey,Func<bool> state,Action toggle,Func<float> volume,Action<float> setVolume)
+        {
+            var row=MixRow(parent);
+            var button=Button(row,LocalizationManager.Get(labelKey),toggle);
+            NarrowButton(button);
+            Localize(button,labelKey);
+            aux[key]=(button,state,AudioAssistStemColors.For(key));
+            WideSlider(Slider(row,volume(),setVolume));
+        }
+        // Mix channels keep a narrow button so the volume slider gets most of the row.
+        private Transform MixRow(Transform parent)
+        {
+            var row=Rect("Row",parent,Color.clear);row.gameObject.AddComponent<LayoutElement>().preferredHeight=buttonHeight;
+            var layout=row.gameObject.AddComponent<HorizontalLayoutGroup>();layout.spacing=6;layout.childControlWidth=true;layout.childForceExpandWidth=false;layout.childControlHeight=true;layout.childForceExpandHeight=true;return row;
+        }
+        private static void NarrowButton(Button button)
+        {
+            var element=button.GetComponent<LayoutElement>();if(element==null)return;
+            element.preferredWidth=0;element.flexibleWidth=.3f;
+        }
+        private static void WideSlider(Slider slider)
+        {
+            var element=slider.GetComponent<LayoutElement>();if(element==null)return;
+            element.preferredWidth=0;element.flexibleWidth=.7f;
+        }
+        private static void Localize(Button button,string key)
+        {
+            var label=button!=null?button.GetComponentInChildren<TMP_Text>(true):null;
+            Localize(label,key);
+            if(label==null)return;
+            // Narrow buttons: keep one line and shrink longer translations instead of clipping.
+            label.textWrappingMode=TextWrappingModes.NoWrap;
+            label.overflowMode=TextOverflowModes.Overflow;
+            label.enableAutoSizing=true;
+            label.fontSizeMin=11;
+            label.fontSizeMax=23;
+        }
+        private static void Localize(TMP_Text label,string key)
+        {
+            if(label==null)return;
+            var binding=label.GetComponent<LocalizedTextBinding>()??label.gameObject.AddComponent<LocalizedTextBinding>();
+            binding.PreserveLayout=true;
+            binding.Key=key;
+        }
+        private static void PaintAux(Button button,Color color,bool on)
+        {
+            var face=button.image;var label=button.GetComponentInChildren<TMP_Text>(true);
+            var faceBinding=face.GetComponent<MenuThemeBinding>();if(faceBinding!=null)faceBinding.enabled=false;
+            var labelBinding=label.GetComponent<MenuThemeBinding>();if(labelBinding!=null)labelBinding.enabled=false;
+            face.color=on?color:MenuTheme.Background;
+            label.color=on?new Color(.14f,.18f,.25f):MenuTheme.ButtonInk;
             var colors=button.colors;colors.selectedColor=Color.white;button.colors=colors;
         }
         private void SyncWaveLanes()
@@ -343,6 +392,7 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 titleBack.anchorMin=new Vector2(0,1);titleBack.anchorMax=Vector2.one;titleBack.pivot=new Vector2(.5f,1);
                 titleBack.sizeDelta=new Vector2(0,44);titleBack.anchoredPosition=Vector2.zero;
                 lane.title=Label(titleBack,AudioAssistController.Names[Array.IndexOf(AudioAssistController.Keys,key)],18,44);
+                Localize(lane.title,"editor.audio_assist.mix."+key);
                 lane.title.GetComponent<MenuThemeBinding>().enabled=false;lane.title.color=AudioAssistStemColors.For(key);
                 lane.title.alignment=TextAlignmentOptions.Center;lane.title.textWrappingMode=TextWrappingModes.NoWrap;lane.title.overflowMode=TextOverflowModes.Ellipsis;
                 lane.title.rectTransform.anchorMin=Vector2.zero;lane.title.rectTransform.anchorMax=Vector2.one;
@@ -382,6 +432,8 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
             {
                 bool visible=visibleKeys.Contains(pair.Key);
                 pair.Value.root.gameObject.SetActive(visible);pair.Value.splitter.gameObject.SetActive(visible);
+                // Keep the add-marker "+" on the leftmost lane only.
+                pair.Value.wave.ShowMarkerIcon=visibleKeys.Length>0&&pair.Key==visibleKeys[0];
             }
             if(changed){LayoutPanels();LateUpdate();}
         }
@@ -393,11 +445,9 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
                 status.text=owner.Status;
                 RefreshAnalysisButton();
                 rates.SetWithoutNotify(owner.Transport.Rate==1?0:owner.Transport.Rate==.75f?1:2);
-                if(loopRange!=null)loopRange.SetWithoutNotify((float)owner.Transport.Duration,(float)owner.State.loopA,(float)owner.State.loopB);
                 foreach(var pair in stems){var state=owner.State.stems.First(s=>s.key==pair.Key);bool ready=owner.Transport.Tracks.ContainsKey(pair.Key);pair.Value.interactable=ready;PaintStem(pair.Value,pair.Key,state.enabled&&ready);}
-                foreach(var item in switches){bool on=item.on();MenuControls.Selected(item.button,on,item.button.name.Substring("Assist_".Length));}
-                foreach(var pair in offsets)if(!pair.Value.isFocused)pair.Value.SetTextWithoutNotify(owner.State.stems.First(s=>s.key==pair.Key).offset.ToString("0.000",CultureInfo.InvariantCulture));
-                if(!aInput.isFocused)aInput.SetTextWithoutNotify(owner.State.loopA.ToString("0.000",CultureInfo.InvariantCulture));if(!bInput.isFocused)bInput.SetTextWithoutNotify(owner.State.loopB.ToString("0.000",CultureInfo.InvariantCulture));
+                foreach(var item in aux.Values)PaintAux(item.button,item.color,item.on());
+                foreach(var item in switches){bool on=item.on();MenuControls.Selected(item.button,on,item.button.name.Substring("Assist_".Length));if(!on)MenuThemeBinding.Bind(item.button.image,MenuColor.Background);}
                 if(!draftTime.isFocused)draftTime.SetTextWithoutNotify((owner.SelectedDraft?.seconds??owner.SelectedSeconds).ToString("0.000",CultureInfo.InvariantCulture));
                 if(!lyricOffset.isFocused)lyricOffset.SetTextWithoutNotify(owner.State.lyricOffset.ToString("0.000",CultureInfo.InvariantCulture));
                 long ticks=owner.Presenter.AssistTicks(owner.SelectedSeconds);long snapped=MusicScoreMakerUtility.CalculateSnapQuantizedTicks(0,ticks);
@@ -452,23 +502,61 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private void RefreshAnalysisButton()
         {
             bool running=owner.AnalysisStatus==AssistAnalysisStatus.Running;
-            analysisButton.interactable=!owner.Busy;analysisLanguage.interactable=!owner.Busy;
-            cancelAnalysis.gameObject.SetActive(running);cancelAnalysis.interactable=owner.Busy;
-            analysisFill.gameObject.SetActive(owner.AnalysisStatus!=AssistAnalysisStatus.Idle);
-            var binding=analysisFill.GetComponent<MenuThemeBinding>();if(binding!=null)binding.enabled=false;
-            analysisFill.color=Color.Lerp(MenuTheme.ButtonFace,owner.AnalysisStatus==AssistAnalysisStatus.Failed?MenuTheme.Danger:MenuTheme.Accent,.32f);
-            analysisFill.rectTransform.anchorMax=new Vector2(owner.AnalysisProgress,1);
-            analysisFill.rectTransform.offsetMin=analysisFill.rectTransform.offsetMax=Vector2.zero;
-            analysisLabel.fontSizeMin=12/Math.Max(.1f,canvas.scaleFactor);
-            analysisLabel.fontSizeMax=Math.Max(23,analysisLabel.fontSizeMin);
-            if(running)
+            RefreshProgressButton(stemAnalysisButton,stemAnalysisFill,stemAnalysisLabel,
+                owner.AnalysisKind==AssistAnalysisKind.Stems,running,"运行分轨");
+            RefreshProgressButton(alignButton,alignFill,alignLabel,
+                owner.AnalysisKind==AssistAnalysisKind.Alignment,running,"对齐歌词与音节");
+            if(languageDropdownButton!=null)
+            {
+                languageDropdownButton.interactable=!owner.Busy;
+                var label=languageDropdownButton.GetComponentInChildren<TMP_Text>(true);
+                if(label!=null)label.text=LanguageLabel();
+            }
+        }
+        private void RefreshProgressButton(Button button,Image fill,TMP_Text label,bool ownsOperation,bool running,string idleText)
+        {
+            if(button==null||fill==null||label==null)return;
+            bool active=running&&ownsOperation;
+            button.interactable=!owner.Busy||active;
+            fill.gameObject.SetActive(active||
+                (ownsOperation&&owner.AnalysisStatus!=AssistAnalysisStatus.Idle));
+            var binding=fill.GetComponent<MenuThemeBinding>();if(binding!=null)binding.enabled=false;
+            fill.color=Color.Lerp(MenuTheme.ButtonFace,owner.AnalysisStatus==AssistAnalysisStatus.Failed?MenuTheme.Danger:MenuTheme.Accent,.32f);
+            fill.rectTransform.anchorMax=new Vector2(ownsOperation?Mathf.Clamp01(owner.AnalysisProgress):0,1);
+            fill.rectTransform.offsetMin=fill.rectTransform.offsetMax=Vector2.zero;
+            label.fontSizeMin=12/Math.Max(.1f,canvas.scaleFactor);label.fontSizeMax=Math.Max(23,label.fontSizeMin);
+            if(active)
             {
                 string stage=owner.AnalysisStage.Replace("正在分离人声、鼓组、贝斯和旋律","正在分轨").Replace("载入内置多语言逐音节对齐模型","载入音节对齐模型").Replace("载入内置 Demucs 分轨模型","载入分轨模型");
-                analysisLabel.text=stage+"\n"+Mathf.FloorToInt(owner.AnalysisProgress*100)+"%";
+                label.text=stage+"\n"+Mathf.FloorToInt(owner.AnalysisProgress*100)+"%";
             }
-            else analysisLabel.text=owner.AnalysisStatus==AssistAnalysisStatus.Completed?"✓ 分析完成 100% · 重新处理":
-                owner.AnalysisStatus==AssistAnalysisStatus.Canceled?"已取消 · 点击重新处理":
-                owner.AnalysisStatus==AssistAnalysisStatus.Failed?"处理失败 · 点击重试":"分轨并对齐歌词";
+            else if(ownsOperation&&owner.AnalysisStatus==AssistAnalysisStatus.Completed)
+                label.text="✓ "+idleText+"完成 100%";
+            else if(ownsOperation&&owner.AnalysisStatus==AssistAnalysisStatus.Canceled)
+                label.text="已取消 · "+idleText;
+            else if(ownsOperation&&owner.AnalysisStatus==AssistAnalysisStatus.Failed)
+                label.text="处理失败 · 点击重试";
+            else label.text=idleText;
+        }
+        private string LanguageLabel()=>"语言："+new[]{"日语","中文","英语（词）"}[Mathf.Clamp(language,0,2)]+"  ▼";
+        private void ToggleLanguageDropdown()
+        {
+            if(languageDropdownMenu!=null)languageDropdownMenu.SetActive(!languageDropdownMenu.activeSelf);
+        }
+        private void SelectLanguage(int value)
+        {
+            language=Mathf.Clamp(value,0,2);
+            if(languageDropdownMenu!=null)languageDropdownMenu.SetActive(false);
+            Refresh();
+        }
+        private GameObject BuildLanguageDropdownMenu(Transform parent)
+        {
+            var menu=Rect("LanguageDropdownMenu",parent,MenuTheme.Panel).gameObject;
+            var layout=Vertical(menu.transform,4);layout.padding=new RectOffset(8,8,6,6);
+            var le=menu.AddComponent<LayoutElement>();le.minHeight=buttonHeight*3+28;le.preferredHeight=buttonHeight*3+28;
+            string[] labels={"日语","中文","英语（词）"};
+            for(int i=0;i<labels.Length;i++){int index=i;Button(menu.transform,labels[i],()=>SelectLanguage(index));}
+            menu.SetActive(false);return menu;
         }
         private double NextLyricTime(AssistLyric line)=>owner.State.lyrics.SkipWhile(l=>l!=line).Skip(1).Select(l=>l.seconds).DefaultIfEmpty(Math.Min(line.seconds+5,owner.Transport.Duration)).First();
         public void Dispose()
@@ -509,8 +597,20 @@ namespace Sekai.MusicScoreMaker.Ingame.AudioAssist
         private Button Button(Transform parent,string text,Action action)
         {
             var rect=Rect("Assist_"+text,parent,Muted);var element=rect.gameObject.AddComponent<LayoutElement>();element.minWidth=44/Math.Max(.1f,canvas.scaleFactor);element.minHeight=buttonHeight;element.preferredHeight=buttonHeight;element.flexibleWidth=1;
-            var button=rect.gameObject.AddComponent<Button>();button.targetGraphic=rect.GetComponent<Image>();button.onClick.AddListener(()=>action());
-            var label=Label(rect,text,23,buttonHeight);label.alignment=TextAlignmentOptions.Center;label.rectTransform.anchorMin=Vector2.zero;label.rectTransform.anchorMax=Vector2.one;label.rectTransform.offsetMin=new Vector2(5,0);label.rectTransform.offsetMax=new Vector2(-5,0);MenuControls.Style(button);return button;
+            var button=rect.gameObject.AddComponent<Button>();button.targetGraphic=rect.GetComponent<Image>();button.onClick.AddListener(()=>{if(action!=null)action();});
+            var label=Label(rect,text,23,buttonHeight);label.alignment=TextAlignmentOptions.Center;label.rectTransform.anchorMin=Vector2.zero;label.rectTransform.anchorMax=Vector2.one;label.rectTransform.offsetMin=new Vector2(5,0);label.rectTransform.offsetMax=new Vector2(-5,0);MenuControls.Style(button);
+            // Sit the buttons on the darker Background tone so they stand out from the Raised cards.
+            MenuThemeBinding.Bind(button.image,MenuColor.Background);return button;
+        }
+        private Button ProgressButton(Transform parent,string text,Action action,out Image fill,out TMP_Text label)
+        {
+            var button=Button(parent,text,action);button.transition=Selectable.Transition.None;
+            var mask=button.gameObject.GetComponent<Mask>()??button.gameObject.AddComponent<Mask>();mask.showMaskGraphic=true;
+            var fillRect=Rect("Progress",button.transform,Color.clear);
+            fillRect.anchorMin=Vector2.zero;fillRect.anchorMax=new Vector2(0,1);fillRect.offsetMin=fillRect.offsetMax=Vector2.zero;
+            fillRect.gameObject.AddComponent<LayoutElement>().ignoreLayout=true;
+            fill=fillRect.GetComponent<Image>();fill.color=Color.Lerp(MenuTheme.ButtonFace,MenuTheme.Accent,.32f);fill.raycastTarget=false;
+            label=button.GetComponentInChildren<TMP_Text>(true);label.enableAutoSizing=true;label.fontSizeMin=16;label.fontSizeMax=23;label.transform.SetAsLastSibling();return button;
         }
         private void Switch(Transform parent,string text,Func<bool> state,Action action){var b=Button(parent,text,action);switches.Add((b,state));}
         private Transform Fold(Transform parent,string title)=>MenuControls.Fold(parent,title,font,buttonHeight,false,"assist."+title);

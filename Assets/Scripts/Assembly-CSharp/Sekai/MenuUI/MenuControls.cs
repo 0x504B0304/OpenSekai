@@ -120,15 +120,20 @@ namespace Sekai.MenuUI
         }
         public static Transform Fold(Transform parent,string title,TMP_FontAsset font,float height,bool expanded,string preference=null)
         {
-            var wrapper=Rect("Fold_"+title,parent);Vertical(wrapper,6);
+            // One rounded card per section. Collapsed it shrinks to the header row, so the
+            // title stays vertically centred instead of leaving an empty strip.
+            var wrapper=Rect("Fold_"+title,parent,MenuTheme.Raised);Vertical(wrapper,0);
             wrapper.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
             var accordion=wrapper.gameObject.AddComponent<Accordion>();accordion.transition=Accordion.Transition.Instant;
-            var header=Rect("Header",wrapper,MenuTheme.Panel);var le=header.gameObject.AddComponent<LayoutElement>();le.minHeight=height;le.preferredHeight=height;
-            var label=Text(header,title,font,22);MenuTypography.Bind(label,MenuTextRole.Section);Stretch(label.rectTransform,8);
-            var body=Rect("Body",wrapper);Vertical(body,8).padding=new RectOffset(8,8,4,12);
+            var header=Rect("Header",wrapper,Color.clear);var le=header.gameObject.AddComponent<LayoutElement>();le.minHeight=height;le.preferredHeight=height;
+            var label=Text(header,title,font,22);MenuTypography.Bind(label,MenuTextRole.Section);
+            label.rectTransform.anchorMin=Vector2.zero;label.rectTransform.anchorMax=Vector2.one;label.rectTransform.offsetMin=new Vector2(14,0);label.rectTransform.offsetMax=new Vector2(-46,0);
+            var chevron=Text(header,"",font,22);chevron.alignment=TextAlignmentOptions.MidlineRight;
+            chevron.rectTransform.anchorMin=Vector2.zero;chevron.rectTransform.anchorMax=Vector2.one;chevron.rectTransform.offsetMin=new Vector2(0,0);chevron.rectTransform.offsetMax=new Vector2(-16,0);
+            var body=Rect("Body",wrapper,Color.clear);Vertical(body,8).padding=new RectOffset(8,8,4,12);
             var toggle=header.gameObject.AddComponent<AccordionElement>();toggle.group=null;toggle.targetGraphic=header.GetComponent<Image>();
             if(preference!=null&&PlayerPrefs.HasKey("MenuUI.fold."+preference))expanded=PlayerPrefs.GetInt("MenuUI.fold."+preference)==1;
-            void Apply(bool value){body.gameObject.SetActive(value);label.text=title+(value?"  −":"  ＋");MenuThemeBinding.Bind(label,value?MenuColor.Text:MenuColor.Muted);}
+            void Apply(bool value){body.gameObject.SetActive(value);chevron.text=value?"▲":"▼";MenuThemeBinding.Bind(label,value?MenuColor.Text:MenuColor.Muted);MenuThemeBinding.Bind(chevron,value?MenuColor.Accent:MenuColor.Muted);}
             toggle.SetIsOnWithoutNotify(expanded);Apply(expanded);
             toggle.onValueChanged.AddListener(value=>{Apply(value);if(preference!=null)PlayerPrefs.SetInt("MenuUI.fold."+preference,value?1:0);});return body;
         }

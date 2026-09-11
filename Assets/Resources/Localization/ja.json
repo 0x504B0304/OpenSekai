@@ -274,5 +274,14 @@
   "menuui.dark": "ダーク",
   "menuui.theme": "メニューテーマ（即時反映）",
   "editor.audio_assist": "採音補助",
-  "editor.minimap": "ミニマップ"
+  "editor.minimap": "ミニマップ",
+  "editor.audio_assist.mix.original": "原曲",
+  "editor.audio_assist.mix.vocals": "ボーカル",
+  "editor.audio_assist.mix.instrumental": "伴奏",
+  "editor.audio_assist.mix.drums": "ドラム",
+  "editor.audio_assist.mix.bass": "ベース",
+  "editor.audio_assist.mix.other": "メロディ",
+  "editor.audio_assist.mix.metronome": "メトロノーム",
+  "editor.audio_assist.mix.draft": "ドラフト音",
+  "editor.audio_assist.mix.note": "譜面音"
 }

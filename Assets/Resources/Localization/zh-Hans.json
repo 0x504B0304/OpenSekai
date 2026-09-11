@@ -274,5 +274,14 @@
   "menuui.dark": "深色",
   "menuui.theme": "菜单主题（立即生效）",
   "editor.audio_assist": "采音",
-  "editor.minimap": "小地图"
+  "editor.minimap": "小地图",
+  "editor.audio_assist.mix.original": "原曲",
+  "editor.audio_assist.mix.vocals": "人声",
+  "editor.audio_assist.mix.instrumental": "伴奏",
+  "editor.audio_assist.mix.drums": "鼓组",
+  "editor.audio_assist.mix.bass": "贝斯",
+  "editor.audio_assist.mix.other": "旋律",
+  "editor.audio_assist.mix.metronome": "节拍器",
+  "editor.audio_assist.mix.draft": "草稿音",
+  "editor.audio_assist.mix.note": "谱面音"
 }

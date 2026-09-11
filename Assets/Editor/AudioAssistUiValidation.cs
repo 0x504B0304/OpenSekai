@@ -96,6 +96,7 @@ public static class AudioAssistUiValidation
                 new AssistDraft{seconds=.85,end=1.2,label="辅"},new AssistDraft{seconds=1.3,end=1.6,label="助"},
                 new AssistDraft{seconds=1.8,end=2.5,label="验"},new AssistDraft{seconds=2.7,end=3.3,label="证"}}});
             Set(controller,"AnalysisStatus",AssistAnalysisStatus.Running);Set(controller,"AnalysisProgress",.72f);
+            Set(controller,"AnalysisKind",AssistAnalysisKind.Alignment);
             Set(controller,"AnalysisStage","对齐乐句 18/30");Set(controller,"Busy",true);
             controller.Status="音节时长 / 分析进度 · 离线界面验证";
         }
@@ -105,7 +106,7 @@ public static class AudioAssistUiValidation
         panel.Build(controller,tools.transform);
         if(vocalReview)
         {
-            var button=canvas.GetComponentsInChildren<Button>(true).First(b=>b.name=="Assist_分轨并对齐歌词");
+            var button=canvas.GetComponentsInChildren<Button>(true).First(b=>b.name=="Assist_对齐歌词与音节");
             button.transform.parent.parent.Find("Header").GetComponent<Toggle>().SetIsOnWithoutNotify(true);
             button.transform.parent.gameObject.SetActive(true);
         }
@@ -128,7 +129,7 @@ public static class AudioAssistUiValidation
                 panel.Toggle(expanded);Canvas.ForceUpdateCanvases();Call(panel,"LateUpdate");
                 if(vocalReview&&expanded)
                 {
-                    var button=canvas.GetComponentsInChildren<Button>(true).First(b=>b.name=="Assist_分轨并对齐歌词");
+                    var button=canvas.GetComponentsInChildren<Button>(true).First(b=>b.name=="Assist_对齐歌词与音节");
                     button.transform.parent.gameObject.SetActive(true);
                     Canvas.ForceUpdateCanvases();Canvas.ForceUpdateCanvases();Call(panel,"LateUpdate");
                     var scroll=button.GetComponentInParent<ScrollRect>();
